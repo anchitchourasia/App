@@ -4,20 +4,22 @@ pipeline {
     stages {
         stage('Install Backend Dependencies') {
             steps {
-                // Tells Jenkins to go into the 'backend' folder
                 dir('backend') {
                     echo 'Installing backend dependencies...'
-                    // Example: sh 'npm install' or 'pip install -r requirements.txt'
+                    // Changed 'sh' to 'bat' for Windows
+                    bat 'echo Installing backend...' 
+                    // Example: bat 'npm install' or 'pip install -r requirements.txt'
                 }
             }
         }
 
         stage('Build Flutter Frontend') {
             steps {
-                // Tells Jenkins to go into the 'heg' folder
                 dir('heg') {
                     echo 'Building Flutter app...'
-                    // Example: sh 'flutter build apk'
+                    // Changed 'sh' to 'bat' for Windows
+                    bat 'echo Building Flutter...'
+                    // Example: bat 'flutter build apk'
                 }
             }
         }
@@ -26,10 +28,14 @@ pipeline {
             steps {
                 parallel(
                     "Backend Tests": {
-                        dir('backend') { sh 'echo "Running backend tests..."' }
+                        dir('backend') { 
+                            bat 'echo "Running backend tests..."' 
+                        }
                     },
                     "Frontend Tests": {
-                        dir('heg') { sh 'echo "Running flutter tests..."' }
+                        dir('heg') { 
+                            bat 'echo "Running flutter tests..."' 
+                        }
                     }
                 )
             }
