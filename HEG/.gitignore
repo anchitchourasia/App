@@ -46,3 +46,15 @@ app.*.map.json
 
 android/java_pid*.hprof
 gradle-*-all.zip
+
+# --- Maven/Java Backend Specifics ---
+**/target/
+**/bin/
+.mvn/wrapper/maven-wrapper.jar
+*.jar
+*.war
+
+# --- Enhanced Flutter Protection ---
+**/build/
+**/HEG/build/
+.pub-cache/
