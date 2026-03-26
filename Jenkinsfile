@@ -2,51 +2,34 @@ pipeline {
     agent any
 
     stages {
-        stage('Install Backend Dependencies') {
+        stage('Install Backend') {
             steps {
                 dir('backend') {
                     echo 'Installing backend dependencies...'
-                    // Changed 'sh' to 'bat' for Windows
-                    bat 'echo Installing backend...' 
-                    // Example: bat 'npm install' or 'pip install -r requirements.txt'
+                    bat 'echo RUN_BACKEND_INSTALL_COMMAND_HERE'
                 }
             }
         }
 
-        stage('Build Flutter Frontend') {
+        stage('Build Flutter') {
             steps {
                 dir('heg') {
-                    echo 'Building Flutter app...'
-                    // Changed 'sh' to 'bat' for Windows
-                    bat 'echo Building Flutter...'
-                    // Example: bat 'flutter build apk'
+                    echo 'Building Flutter frontend...'
+                    bat 'echo RUN_FLUTTER_BUILD_COMMAND_HERE'
                 }
             }
         }
 
-        stage('Test') {
+        stage('Parallel Tests') {
             steps {
                 parallel(
-                    "Backend Tests": {
-                        dir('backend') { 
-                            bat 'echo "Running backend tests..."' 
-                        }
+                    "Backend Check": {
+                        dir('backend') { bat 'echo Testing Backend...' }
                     },
-                    "Frontend Tests": {
-                        dir('heg') { 
-                            bat 'echo "Running flutter tests..."' 
-                        }
+                    "Flutter Check": {
+                        dir('heg') { bat 'echo Testing Flutter...' }
                     }
                 )
-            }
-        }
-        stage('Build Flutter Frontend') {
-            steps {
-                dir('heg') {
-                    // This fetches flutter packages and builds the APK
-                    bat 'flutter pub get'
-                    bat 'flutter build apk --release'
-                }
             }
         }
     }
