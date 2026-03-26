@@ -5,8 +5,9 @@ pipeline {
         stage('Install Backend') {
             steps {
                 dir('backend') {
-                    echo 'Installing backend dependencies...'
-                    bat 'echo RUN_BACKEND_INSTALL_COMMAND_HERE'
+                    echo 'Installing Python dependencies...'
+                    // Ensure requirements.txt exists in your backend folder
+                    bat 'pip install -r requirements.txt'
                 }
             }
         }
@@ -14,8 +15,9 @@ pipeline {
         stage('Build Flutter') {
             steps {
                 dir('heg') {
-                    echo 'Building Flutter frontend...'
-                    bat 'echo RUN_FLUTTER_BUILD_COMMAND_HERE'
+                    echo 'Fetching Flutter packages and building APK...'
+                    bat 'flutter pub get'
+                    bat 'flutter build apk --release'
                 }
             }
         }
@@ -24,13 +26,27 @@ pipeline {
             steps {
                 parallel(
                     "Backend Check": {
-                        dir('backend') { bat 'echo Testing Backend...' }
+                        dir('backend') { 
+                            // Runs your python tests
+                            bat 'pytest' 
+                        }
                     },
                     "Flutter Check": {
-                        dir('heg') { bat 'echo Testing Flutter...' }
+                        dir('heg') { 
+                            // Runs flutter unit tests
+                            bat 'flutter test' 
+                        }
                     }
                 )
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build Successful! Archiving APK...'
+            // This makes the APK available for download in the Jenkins UI
+            archiveArtifacts artifacts: 'heg/build/app/outputs/flutter-apk/app-release.apk', fingerprint: true
         }
     }
 }
