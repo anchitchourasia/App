@@ -40,15 +40,6 @@ pipeline {
                 )
             }
         }
-        stage('Install Backend Dependencies') {
-            steps {
-                dir('backend') {
-                    // This replaces the placeholder echo
-                    bat 'pip install -r requirements.txt'
-                }
-            }
-        }
-
         stage('Build Flutter Frontend') {
             steps {
                 dir('heg') {
