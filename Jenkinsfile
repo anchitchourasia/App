@@ -17,16 +17,12 @@ pipeline {
             }
         }
 
-        // --- STAGE 2: Build Spring Boot Backend ---
+                // --- STAGE 2: Build Spring Boot Backend ---
         stage('Build Spring Boot Backend') {
-            // 'when' ensures this only runs if backend files changed (saves time)
-            when {
-                changeset "${BACKEND_DIR}/**"
-            }
+            // I removed the 'when' block here
             steps {
                 dir("${env.BACKEND_DIR}") {
                     echo 'Building Spring Boot Backend...'
-                    // Using Windows bat command to run Maven wrapper
                     bat 'mvnw.cmd clean package -DskipTests'
                 }
             }
@@ -34,15 +30,11 @@ pipeline {
 
         // --- STAGE 3: Build Flutter App ---
         stage('Build Flutter App') {
-            // 'when' ensures this only runs if Flutter files changed
-            when {
-                changeset "${FLUTTER_DIR}/**"
-            }
+            // I removed the 'when' block here
             steps {
                 dir("${env.FLUTTER_DIR}") {
                     echo 'Fetching Flutter dependencies...'
                     bat 'flutter pub get'
-                    
                     echo 'Building Android APK...'
                     bat 'flutter build apk --release'
                 }
