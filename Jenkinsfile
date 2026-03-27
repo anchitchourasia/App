@@ -1,15 +1,13 @@
 pipeline {
-    // Run on any available Jenkins agent (your PC)
     agent any
 
     environment {
-        // These match the exact folder names in your GitHub repo
-        FLUTTER_DIR = 'HEG'         
-        BACKEND_DIR = 'backend'        
+        FLUTTER_DIR = 'HEG'
+        BACKEND_DIR = 'backend\\demo'
     }
 
     stages {
-        // --- STAGE 1: Get the Code ---
+
         stage('Checkout') {
             steps {
                 echo 'Checking out code from GitHub...'
@@ -17,20 +15,17 @@ pipeline {
             }
         }
 
-                // --- STAGE 2: Build Spring Boot Backend ---
         stage('Build Spring Boot Backend') {
-            // I removed the 'when' block here
             steps {
                 dir("${env.BACKEND_DIR}") {
                     echo 'Building Spring Boot Backend...'
-                    bat 'mvnw.cmd clean package -DskipTests'
+                    // Use cmd /c to force Windows to find the file in the current directory
+                    bat 'cmd /c mvnw.cmd clean package -DskipTests'
                 }
             }
         }
 
-        // --- STAGE 3: Build Flutter App ---
         stage('Build Flutter App') {
-            // I removed the 'when' block here
             steps {
                 dir("${env.FLUTTER_DIR}") {
                     echo 'Fetching Flutter dependencies...'
@@ -41,20 +36,15 @@ pipeline {
             }
         }
 
-        // --- STAGE 4: Save Build Artifacts ---
         stage('Archive Artifacts') {
             steps {
                 echo 'Saving the generated APK and Backend JAR...'
-                // Save the Backend JAR file so you can download it from Jenkins
                 archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
-                
-                // Save the Flutter APK file
                 archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
             }
         }
     }
 
-    // --- POST ACTIONS ---
     post {
         success {
             echo 'SUCCESS: Pipeline completed successfully!'
