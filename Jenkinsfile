@@ -1,19 +1,15 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven-3.9.12'
-    }
-
     environment {
         FLUTTER_DIR = 'HEG'
         BACKEND_DIR = 'backend\\demo'
+        MVN_CMD = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out code from GitHub...'
                 checkout scm
             }
         }
@@ -21,38 +17,10 @@ pipeline {
         stage('Build Spring Boot Backend') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    echo 'Building Spring Boot Backend...'
-                    bat 'mvn -version'
-                    bat 'mvn clean package -DskipTests'
+                    bat "\"%MVN_CMD%\" -version"
+                    bat "\"%MVN_CMD%\" clean package -DskipTests"
                 }
             }
-        }
-
-        stage('Build Flutter App') {
-            steps {
-                dir("${env.FLUTTER_DIR}") {
-                    echo 'Fetching Flutter dependencies...'
-                    bat 'flutter pub get'
-                    echo 'Building Android APK...'
-                    bat 'flutter build apk --release'
-                }
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
-                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
-            }
-        }
-    }
-
-    post {
-        success {
-            echo 'SUCCESS: Build completed successfully!'
-        }
-        failure {
-            echo 'FAILED: Check Console Output for errors.'
         }
     }
 }
