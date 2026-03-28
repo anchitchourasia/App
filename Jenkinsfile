@@ -6,11 +6,15 @@ pipeline {
         BACKEND_DIR = 'backend\\demo'
         MVN_CMD = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
         MVN_SETTINGS = 'C:\\Users\\heg\\.m2\\settings.xml'
+
         HTTP_PROXY = 'http://192.168.9.112:8080'
         HTTPS_PROXY = 'http://192.168.9.112:8080'
         http_proxy = 'http://192.168.9.112:8080'
         https_proxy = 'http://192.168.9.112:8080'
-        NO_PROXY = 'localhost,127.0.0.1'
+        NO_PROXY = 'localhost,127.0.0.1,::1'
+
+        PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
+        FLUTTER_STORAGE_BASE_URL = 'https://storage.flutter-io.cn'
     }
 
     stages {
