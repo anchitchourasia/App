@@ -10,6 +10,12 @@ pipeline {
         PROXY_HOST = '192.168.9.112'
         PROXY_PORT = '8080'
         NO_PROXY_VALUE = 'localhost,127.0.0.1,::1'
+
+        ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
+        ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
+
+        PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
+        FLUTTER_STORAGE_BASE_URL = 'https://storage.flutter-io.cn'
     }
 
     stages {
@@ -38,8 +44,7 @@ pipeline {
                         varPasswordPairs: [
                             [var: 'PUSER'],
                             [var: 'PPASS']
-                        ],
-                        varMaskRegexes: []
+                        ]
                     ) {
                         dir("${env.FLUTTER_DIR}") {
                             bat '''
@@ -50,8 +55,14 @@ pipeline {
                                 set http_proxy=%PROXY_URL%
                                 set https_proxy=%PROXY_URL%
                                 set no_proxy=%NO_PROXY_VALUE%
+                                set HTTP_PROXY=%PROXY_URL%
+                                set HTTPS_PROXY=%PROXY_URL%
+                                set NO_PROXY=%NO_PROXY_VALUE%
 
-                                flutter doctor -v
+                                set ANDROID_HOME=%ANDROID_HOME%
+                                set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
+
+                                flutter config --android-sdk "%ANDROID_SDK_ROOT%"
                                 flutter pub get
                                 flutter build apk --release
                             '''
@@ -63,8 +74,8 @@ pipeline {
 
         stage('Archive Artifacts') {
             steps {
-                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
-                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
+                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: false
+                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: false
             }
         }
     }
