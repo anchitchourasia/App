@@ -5,6 +5,7 @@ pipeline {
         FLUTTER_DIR = 'HEG'
         BACKEND_DIR = 'backend\\demo'
         MVN_CMD = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
+        MVN_SETTINGS = 'C:\\Users\\heg\\.m2\\settings.xml'
     }
 
     stages {
@@ -17,9 +18,25 @@ pipeline {
         stage('Build Spring Boot Backend') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    bat "\"%MVN_CMD%\" -version"
-                    bat "\"%MVN_CMD%\" clean package -DskipTests"
+                    bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" -version"
+                    bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean package -DskipTests -U"
                 }
+            }
+        }
+
+        stage('Build Flutter App') {
+            steps {
+                dir("${env.FLUTTER_DIR}") {
+                    bat 'flutter pub get'
+                    bat 'flutter build apk --release'
+                }
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
+                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
             }
         }
     }
