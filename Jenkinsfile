@@ -34,6 +34,9 @@ pipeline {
         }
 
         stage('Build Flutter App') {
+            options {
+                timeout(time: 20, unit: 'MINUTES')
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'proxy-creds',
