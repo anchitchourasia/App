@@ -22,6 +22,7 @@ pipeline {
             steps {
                 dir("${env.BACKEND_DIR}") {
                     echo 'Building Spring Boot Backend...'
+                    bat 'mvn -version'
                     bat 'mvn clean package -DskipTests'
                 }
             }
@@ -40,7 +41,6 @@ pipeline {
 
         stage('Archive Artifacts') {
             steps {
-                echo 'Saving JAR and APK files...'
                 archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
                 archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
             }
