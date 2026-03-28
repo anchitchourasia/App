@@ -6,6 +6,10 @@ pipeline {
         BACKEND_DIR = 'backend\\demo'
         MVN_CMD = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
         MVN_SETTINGS = 'C:\\Users\\heg\\.m2\\settings.xml'
+
+        PROXY_HOST = '192.168.9.112'
+        PROXY_PORT = '8080'
+        NO_PROXY_VALUE = 'localhost,127.0.0.1,::1'
     }
 
     stages {
@@ -30,19 +34,28 @@ pipeline {
                     usernameVariable: 'PUSER',
                     passwordVariable: 'PPASS'
                 )]) {
-                    bat '''
-                        git config --global --add safe.directory C:/flutter/flutter
-                        git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
-                    '''
-                    dir("${env.FLUTTER_DIR}") {
-                        bat '''
-                            set http_proxy=http://%PUSER%:%PPASS%@192.168.9.112:8080
-                            set https_proxy=http://%PUSER%:%PPASS%@192.168.9.112:8080
-                            set no_proxy=localhost,127.0.0.1,::1
-                            flutter doctor -v
-                            flutter pub get
-                            flutter build apk --release
-                        '''
+                    maskPasswords(
+                        varPasswordPairs: [
+                            [var: 'PUSER'],
+                            [var: 'PPASS']
+                        ],
+                        varMaskRegexes: []
+                    ) {
+                        dir("${env.FLUTTER_DIR}") {
+                            bat '''
+                                git config --global --add safe.directory C:/flutter/flutter
+                                git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
+
+                                set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
+                                set http_proxy=%PROXY_URL%
+                                set https_proxy=%PROXY_URL%
+                                set no_proxy=%NO_PROXY_VALUE%
+
+                                flutter doctor -v
+                                flutter pub get
+                                flutter build apk --release
+                            '''
+                        }
                     }
                 }
             }
