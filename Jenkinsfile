@@ -14,8 +14,6 @@ pipeline {
         ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
 
-        PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
-        FLUTTER_STORAGE_BASE_URL = 'https://storage.flutter-io.cn'
         PUB_CACHE = 'C:\\flutter\\.pub-cache'
     }
 
@@ -30,44 +28,6 @@ pipeline {
             steps {
                 dir("${env.BACKEND_DIR}") {
                     bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean package -DskipTests -U"
-                }
-            }
-        }
-
-        stage('Prepare Flutter Cache') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'proxy-creds',
-                    usernameVariable: 'PUSER',
-                    passwordVariable: 'PPASS'
-                )]) {
-                    maskPasswords(
-                        varPasswordPairs: [
-                            [var: 'PUSER'],
-                            [var: 'PPASS']
-                        ],
-                        varMaskRegexes: []
-                    ) {
-                        bat '''
-                            if not exist "%PUB_CACHE%" mkdir "%PUB_CACHE%"
-
-                            set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
-                            set http_proxy=%PROXY_URL%
-                            set https_proxy=%PROXY_URL%
-                            set HTTP_PROXY=%PROXY_URL%
-                            set HTTPS_PROXY=%PROXY_URL%
-                            set no_proxy=%NO_PROXY_VALUE%
-                            set NO_PROXY=%NO_PROXY_VALUE%
-
-                            set ANDROID_HOME=%ANDROID_HOME%
-                            set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-                            set PUB_CACHE=%PUB_CACHE%
-                            set PUB_HOSTED_URL=%PUB_HOSTED_URL%
-                            set FLUTTER_STORAGE_BASE_URL=%FLUTTER_STORAGE_BASE_URL%
-
-                            call flutter precache --android
-                        '''
-                    }
                 }
             }
         }
@@ -88,6 +48,8 @@ pipeline {
                     ) {
                         dir("${env.FLUTTER_DIR}") {
                             bat '''
+                                if not exist "%PUB_CACHE%" mkdir "%PUB_CACHE%"
+
                                 git config --global --add safe.directory C:/flutter/flutter
                                 git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
 
@@ -102,8 +64,6 @@ pipeline {
                                 set ANDROID_HOME=%ANDROID_HOME%
                                 set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
                                 set PUB_CACHE=%PUB_CACHE%
-                                set PUB_HOSTED_URL=%PUB_HOSTED_URL%
-                                set FLUTTER_STORAGE_BASE_URL=%FLUTTER_STORAGE_BASE_URL%
 
                                 call flutter pub get
                                 call flutter build apk --release
