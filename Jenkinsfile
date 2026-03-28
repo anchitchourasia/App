@@ -49,9 +49,6 @@ pipeline {
                                 git config --global --add safe.directory C:/flutter/flutter
                                 git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
 
-                                set ANDROID_HOME=%ANDROID_HOME%
-                                set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-
                                 set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
                                 set http_proxy=%PROXY_URL%
                                 set https_proxy=%PROXY_URL%
@@ -59,6 +56,9 @@ pipeline {
                                 set HTTPS_PROXY=%PROXY_URL%
                                 set no_proxy=%NO_PROXY_VALUE%
                                 set NO_PROXY=%NO_PROXY_VALUE%
+
+                                set ANDROID_HOME=%ANDROID_HOME%
+                                set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
 
                                 call flutter pub get
                                 call flutter build apk --release
