@@ -13,8 +13,9 @@ pipeline {
 
         ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
-
         PUB_CACHE = 'C:\\flutter\\.pub-cache'
+
+        DART_VM_OPTIONS = '--root-certs-file=C:/certs/corp-proxy.pem'
     }
 
     stages {
@@ -64,7 +65,13 @@ pipeline {
                                 set ANDROID_HOME=%ANDROID_HOME%
                                 set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
                                 set PUB_CACHE=%PUB_CACHE%
+                                set DART_VM_OPTIONS=%DART_VM_OPTIONS%
 
+                                call flutter config --no-enable-linux-desktop
+                                call flutter config --no-enable-windows-desktop
+                                call flutter config --no-enable-macos-desktop
+
+                                call flutter create --platforms=android .
                                 call flutter pub get
                                 call flutter build apk --release
                             '''
