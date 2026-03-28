@@ -44,7 +44,8 @@ pipeline {
                         varPasswordPairs: [
                             [var: 'PUSER'],
                             [var: 'PPASS']
-                        ]
+                        ],
+                        varMaskRegexes: []
                     ) {
                         dir("${env.FLUTTER_DIR}") {
                             bat '''
