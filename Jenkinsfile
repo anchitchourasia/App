@@ -13,6 +13,9 @@ pipeline {
 
         ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
+
+        PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
+        FLUTTER_STORAGE_BASE_URL = 'https://storage.flutter-io.cn'
     }
 
     stages {
@@ -60,6 +63,7 @@ pipeline {
                                 set ANDROID_HOME=%ANDROID_HOME%
                                 set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
 
+                                call flutter doctor -v
                                 call flutter pub get
                                 call flutter build apk --release
                             '''
