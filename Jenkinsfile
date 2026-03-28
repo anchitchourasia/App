@@ -18,7 +18,6 @@ pipeline {
         stage('Build Spring Boot Backend') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" -version"
                     bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean package -DskipTests -U"
                 }
             }
@@ -26,6 +25,8 @@ pipeline {
 
         stage('Build Flutter App') {
             steps {
+                bat 'git config --global --add safe.directory C:/flutter/flutter'
+                bat 'git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG'
                 dir("${env.FLUTTER_DIR}") {
                     bat 'flutter pub get'
                     bat 'flutter build apk --release'
