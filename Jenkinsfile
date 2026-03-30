@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout()
+    }
+
     environment {
         FLUTTER_DIR = 'HEG'
         BACKEND_DIR = 'backend\\demo'
@@ -34,28 +38,27 @@ pipeline {
                     usernameVariable: 'PUSER',
                     passwordVariable: 'PPASS'
                 )]) {
-                    maskPasswords(
-                        varPasswordPairs: [
-                            [var: 'PUSER'],
-                            [var: 'PPASS']
-                        ],
-                        varMaskRegexes: []
-                    ) {
-                        dir("${env.FLUTTER_DIR}") {
-                            bat '''
-                                git config --global --add safe.directory C:/flutter/flutter
-                                git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
+                    dir("${env.FLUTTER_DIR}") {
+                        bat '''
+                            @echo on
+                            git config --global --add safe.directory C:/flutter/flutter
+                            git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
 
-                                set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
-                                set http_proxy=%PROXY_URL%
-                                set https_proxy=%PROXY_URL%
-                                set no_proxy=%NO_PROXY_VALUE%
+                            set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
+                            set http_proxy=%PROXY_URL%
+                            set https_proxy=%PROXY_URL%
+                            set HTTP_PROXY=%PROXY_URL%
+                            set HTTPS_PROXY=%PROXY_URL%
+                            set no_proxy=%NO_PROXY_VALUE%
+                            set NO_PROXY=%NO_PROXY_VALUE%
 
-                                flutter doctor -v
-                                flutter pub get
-                                flutter build apk --release
-                            '''
-                        }
+                            flutter doctor -v
+                            call flutter pub get -v
+                            if errorlevel 1 exit /b 1
+
+                            call flutter build apk --release -v
+                            if errorlevel 1 exit /b 1
+                        '''
                     }
                 }
             }
@@ -63,8 +66,8 @@ pipeline {
 
         stage('Archive Artifacts') {
             steps {
-                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: true
-                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: true
+                archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: false
+                archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: false
             }
         }
     }
