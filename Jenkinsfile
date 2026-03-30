@@ -14,7 +14,7 @@ pipeline {
         MVN_SETTINGS = 'C:\\Users\\heg\\.m2\\settings.xml'
 
         PROXY_HOST = '192.168.9.112'
-        PROXY_PORT = '8080'
+        PROXY_PORT = '808'
         NO_PROXY_VALUE = 'localhost,127.0.0.1,::1'
 
         ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
