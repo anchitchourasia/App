@@ -22,13 +22,12 @@ pipeline {
         PUB_CACHE        = 'C:\\flutter\\.pub-cache'
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                cleanWs()        // ✅ wipes stale workspace before every build
-                checkout scm
-            }
-        }
+    stage('Checkout') {
+    steps {
+        deleteDir()      // ✅ built-in, no plugin needed
+        checkout scm
+          }
+    }
 
         stage('Build Spring Boot Backend') {
             steps {
