@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/insurance_api.dart';
 import '../data/session_store.dart';
 import 'insurance_details_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -19,17 +20,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
   String? get _userId => SessionStore.currentUserId;
 
   // IMPORTANT: keep same as other pages
-  static const String _apiKey = 'HEG_12345_SECRET';
+  static final String _apiKey = dotenv.env['API_KEY'] ?? '';
 
   // Use same BASE_URL logic as you used in details page (dart-define based)
-  static const String _definedBaseUrl = String.fromEnvironment('BASE_URL');
-  static const int _port = 8080;
-
-  String get _baseUrl {
-    if (_definedBaseUrl.isNotEmpty) return _definedBaseUrl;
-    // Default for emulator builds (you can override with --dart-define)
-    return 'http://10.0.2.2:$_port';
-  }
+  // ✅ REPLACE WITH
+  static final String _baseUrl = dotenv.env['BASE_URL'] ?? '';
 
   late final InsuranceApi _api = InsuranceApi(
     baseUrl: _baseUrl,

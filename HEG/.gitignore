@@ -58,3 +58,4 @@ gradle-*-all.zip
 **/build/
 **/HEG/build/
 .pub-cache/
+.env

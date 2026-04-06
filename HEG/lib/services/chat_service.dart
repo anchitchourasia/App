@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // ✅ add
 
 class ChatMessage {
   final String senderId;
@@ -64,30 +64,10 @@ class ChatSendResult {
 
 class ChatService {
   // ── Base URL ────────────────────────────────────────────────────────────
-  static const String _envUrl = String.fromEnvironment(
-    'BASE_URL',
-    defaultValue: '',
-  );
-
-  static String get baseUrl {
-    if (_envUrl.isNotEmpty) return _envUrl;
-    if (Platform.isAndroid) {
-      return _isEmulator ? 'http://10.0.2.2:8080' : 'http://192.168.1.5:8080';
-    }
-    return 'http://localhost:8080';
-  }
-
-  static bool get _isEmulator {
-    bool isEmulator = false;
-    assert(() {
-      isEmulator = true;
-      return true;
-    }());
-    return isEmulator;
-  }
-
+  // ✅ REPLACE WITH
   static String apiKeyHeaderName = 'X-API-KEY';
-  static String? apiKey = 'HEG_12345_SECRET';
+  static String get baseUrl => dotenv.env['BASE_URL'] ?? '';
+  static String? get apiKey => dotenv.env['API_KEY'];
 
   static StompClient? _client;
   static bool isConnected = false;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:hive_flutter/hive_flutter.dart'; // ✅ add for offline cache (Hive)
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'data/insurance_db.dart';
 import 'data/session_store.dart'; // ✅ add this
 import 'screens/login_page.dart';
@@ -26,6 +26,8 @@ import 'screens/applicants_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: '.env');
 
   // DB init
   await InsuranceDb.database;

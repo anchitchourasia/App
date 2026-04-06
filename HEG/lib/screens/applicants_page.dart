@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
@@ -33,8 +33,8 @@ class ApplicantsPage extends StatefulWidget {
 }
 
 class _ApplicantsPageState extends State<ApplicantsPage> {
-  static const String _apiKey = 'HEG_12345_SECRET';
-  static const String _baseUrl = 'http://10.0.2.2:8080'; // Android emulator
+  static final String _apiKey = dotenv.env['API_KEY'] ?? '';
+  static final String _baseUrl = dotenv.env['BASE_URL'] ?? '';
   static const String _cacheKey = 'applicants_cache_v1';
 
   // ✅ Same background as InsuranceUploadPage
@@ -174,7 +174,7 @@ class _ApplicantsPageState extends State<ApplicantsPage> {
 
     final res = await http.get(
       uri,
-      headers: const {'X-API-KEY': _apiKey, 'Accept': 'application/json'},
+      headers: {'X-API-KEY': _apiKey, 'Accept': 'application/json'},
     );
 
     if (res.statusCode != 200) {

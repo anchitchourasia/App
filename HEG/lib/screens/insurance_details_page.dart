@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../data/insurance_api.dart';
 import '../data/session_store.dart';
 
@@ -28,24 +28,9 @@ class _InsuranceDetailsPageState extends State<InsuranceDetailsPage> {
   bool get _isAdmin => SessionStore.isAdmin == true;
 
   // Keep consistent with InsuranceUploadPage / backend.
-  static const String _apiKey = 'HEG_12345_SECRET';
+  static final String _apiKey = dotenv.env['API_KEY'] ?? '';
 
-  // Flexible BASE_URL:
-  // - Default Android emulator: http://10.0.2.2:8080
-  // - Override at build/run time:
-  //   --dart-define=BASE_URL=http://192.168.8.25:8080
-  static const int _port = 8080;
-  static const String _definedBaseUrl = String.fromEnvironment(
-    'http://192.168.8.25:8080',
-  );
-
-  String get _baseUrl {
-    if (_definedBaseUrl.isNotEmpty) return _definedBaseUrl;
-
-    if (kIsWeb) return 'http://localhost:$_port';
-    if (Platform.isAndroid) return 'http://10.0.2.2:$_port'; // emulator default
-    return 'http://localhost:$_port';
-  }
+  static final String _baseUrl = dotenv.env['BASE_URL'] ?? '';
 
   late final InsuranceApi _api = InsuranceApi(
     baseUrl: _baseUrl,
