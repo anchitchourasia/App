@@ -25,6 +25,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                cleanWs()        // ✅ wipes stale workspace before every build
                 checkout scm
             }
         }
@@ -39,7 +40,6 @@ pipeline {
 
         stage('Build Flutter App') {
             steps {
-                // ✅ Inject .env secret file into the Flutter project directory
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'proxy-creds',
