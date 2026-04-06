@@ -10,16 +10,16 @@ pipeline {
         FLUTTER_DIR = 'HEG'
         BACKEND_DIR = 'backend\\demo'
 
-        MVN_CMD = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
+        MVN_CMD     = 'C:\\Users\\heg\\.m2\\wrapper\\dists\\apache-maven-3.9.12\\59fe215c0ad6947fea90184bf7add084544567b927287592651fda3782e0e798\\bin\\mvn.cmd'
         MVN_SETTINGS = 'C:\\Users\\heg\\.m2\\settings.xml'
 
-        PROXY_HOST = '192.168.9.112'
-        PROXY_PORT = '808'
-        NO_PROXY_VALUE = 'localhost,127.0.0.1,::1'
+        PROXY_HOST      = '192.168.9.112'
+        PROXY_PORT      = '808'
+        NO_PROXY_VALUE  = 'localhost,127.0.0.1,::1'
 
-        ANDROID_HOME = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
+        ANDROID_HOME     = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
-        PUB_CACHE = 'C:\\flutter\\.pub-cache'
+        PUB_CACHE        = 'C:\\flutter\\.pub-cache'
     }
 
     stages {
@@ -39,11 +39,18 @@ pipeline {
 
         stage('Build Flutter App') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'proxy-creds',
-                    usernameVariable: 'PUSER',
-                    passwordVariable: 'PPASS'
-                )]) {
+                // ✅ Inject .env secret file into the Flutter project directory
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'proxy-creds',
+                        usernameVariable: 'PUSER',
+                        passwordVariable: 'PPASS'
+                    ),
+                    file(
+                        credentialsId: 'flutter-dotenv',
+                        variable: 'DOTENV_FILE'
+                    )
+                ]) {
                     dir("${env.FLUTTER_DIR}") {
                         bat '''
 @echo on
@@ -52,6 +59,16 @@ if not exist "%PUB_CACHE%" mkdir "%PUB_CACHE%"
 
 git config --global --add safe.directory C:/flutter/flutter
 git config --global --add safe.directory C:/ProgramData/Jenkins/.jenkins/jobs/Company-Fullstack-App/workspace/HEG
+
+REM ✅ Copy .env secret file into Flutter assets folder
+echo Copying .env to assets folder...
+if not exist "assets" mkdir "assets"
+copy /Y "%DOTENV_FILE%" "assets\\.env"
+if errorlevel 1 (
+    echo FAILED to copy .env file
+    exit /b 1
+)
+echo .env copied successfully
 
 set PROXY_URL=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT%
 
