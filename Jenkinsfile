@@ -124,6 +124,25 @@ echo APK_FOUND
                 archiveArtifacts artifacts: "${env.FLUTTER_DIR}/build/app/outputs/flutter-apk/app-release.apk", allowEmptyArchive: false
             }
         }
+                stage('SonarQube Analysis - Backend') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('SonarQube') {
+                        dir("${env.BACKEND_DIR}") {
+                            bat """
+                                "${scannerHome}\\bin\\sonar-scanner.bat" ^
+                                -Dsonar.projectKey=HEG-HRMS ^
+                                -Dsonar.projectName=HEG-HRMS ^
+                                -Dsonar.host.url=http://localhost:9000 ^
+                                -Dsonar.sources=src/main/java ^
+                                -Dsonar.java.binaries=target/classes
+                            """
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {
