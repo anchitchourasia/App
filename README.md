@@ -1,6 +1,6 @@
-<![CDATA[<div align="center">
+<div align="center">
 
-<img src="https://img.shields.io/badge/HEG-HRMS-0EA5A4?style=for-the-badge&logoColor=white" height="60"/>
+<img src="https://img.shields.io/badge/HEG-HRMS-0EA5A4?style=for-the-badge&logoColor=white" height="50"/>
 
 # 🏢 HEG HRMS
 ### Human Resource Management System
@@ -13,9 +13,9 @@
 
 > A full-stack mobile HR Management System built with **Flutter** + **Spring Boot**, designed for enterprise workforce management with real-time chat, insurance handling, attendance tracking, and more.
 
----
-
 </div>
+
+---
 
 ## ✨ Features
 
@@ -39,6 +39,7 @@
 ## 🛠️ Tech Stack
 
 ### 📱 Frontend — Flutter
+
 ```
 Flutter 3.x (Dart)
 ├── State Management    → GetX
@@ -51,6 +52,7 @@ Flutter 3.x (Dart)
 ```
 
 ### ⚙️ Backend — Spring Boot
+
 ```
 Spring Boot 3.x (Java 17)
 ├── REST API            → Spring Web (Controllers)
@@ -63,11 +65,12 @@ Spring Boot 3.x (Java 17)
 ```
 
 ### 🗄️ Database
+
 ```
 Oracle Database
-├── Host     → 192.168.x.x:1521
-├── Schema   → Employee, Insurance, Chat, Notifications, Attendance
-└── DDL      → Hibernate auto-update
+├── Host   → 192.168.x.x:1521
+├── Schema → Employee, Insurance, Chat, Notifications, Attendance
+└── DDL    → Hibernate auto-update
 ```
 
 ---
@@ -76,7 +79,7 @@ Oracle Database
 
 ```
 App/
-├── 📱 HEG/                          ← Flutter App
+├── 📱 HEG/                              ← Flutter App
 │   ├── lib/
 │   │   ├── data/
 │   │   │   ├── insurance_api.dart
@@ -100,7 +103,7 @@ App/
 │   │   │   ├── self_service_portal_page.dart
 │   │   │   └── vehicle_tracking_page.dart
 │   │   ├── services/
-│   │   │   ├── chat_service.dart       ← WebSocket + REST chat
+│   │   │   ├── chat_service.dart        ← WebSocket + REST chat
 │   │   │   └── notification_service.dart
 │   │   ├── widgets/
 │   │   │   ├── chat_bubble_button.dart
@@ -109,15 +112,15 @@ App/
 │   └── android/
 │       └── app/src/main/AndroidManifest.xml
 │
-└── ⚙️ backend/demo/                  ← Spring Boot API
+└── ⚙️ backend/demo/                     ← Spring Boot API
     └── src/main/java/com/example/demo/
-        ├── chat/                      ← WebSocket STOMP chat
-        ├── controller/                ← REST API endpoints
-        ├── dto/                       ← Data Transfer Objects
-        ├── entity/                    ← JPA Entities (Oracle tables)
-        ├── insurance/                 ← Insurance module
-        ├── security/                  ← API Key security filter
-        ├── service/                   ← Business logic
+        ├── chat/                        ← WebSocket STOMP chat
+        ├── controller/                  ← REST API endpoints
+        ├── dto/                         ← Data Transfer Objects
+        ├── entity/                      ← JPA Entities (Oracle tables)
+        ├── insurance/                   ← Insurance module
+        ├── security/                    ← API Key security filter
+        ├── service/                     ← Business logic
         └── DemoApplication.java
 ```
 
@@ -127,7 +130,7 @@ App/
 
 - All API calls are protected via **`X-API-KEY`** header authentication
 - API key is stored **only on the backend** (`application.properties`) — never exposed to the client
-- Flutter app sends requests to the Spring Boot backend which internally manages all API keys
+- Flutter app sends requests to Spring Boot which internally manages all API keys
 - Role-based views: **Admin** sees all employees' chats; **Employee** sees only their own
 
 ---
@@ -135,18 +138,18 @@ App/
 ## 💬 Real-time Chat Architecture
 
 ```
-Flutter (Employee)                Spring Boot Backend              Flutter (Admin)
-      │                                   │                               │
-      │──── WebSocket CONNECT ───────────▶│                               │
-      │──── STOMP SUBSCRIBE ─────────────▶│◀──── STOMP SUBSCRIBE ─────────│
-      │                                   │                               │
-      │──── Send Message ────────────────▶│──── Broadcast to Admin ──────▶│
-      │                                   │                               │
-      │◀─── Polling fallback (8s) ────────│                               │
+Flutter (Employee)          Spring Boot Backend          Flutter (Admin)
+       │                            │                           │
+       │─── WebSocket CONNECT ─────▶│                           │
+       │─── STOMP SUBSCRIBE ───────▶│◀──── STOMP SUBSCRIBE ─────│
+       │                            │                           │
+       │─── Send Message ──────────▶│──── Broadcast to Admin ──▶│
+       │                            │                           │
+       │◀── Polling fallback (8s) ──│                           │
 ```
 
-- Primary: **WebSocket (STOMP)** for instant delivery
-- Fallback: **HTTP polling** every 8 seconds for reliability
+- **Primary:** WebSocket (STOMP) for instant delivery
+- **Fallback:** HTTP polling every 8 seconds for reliability
 - Unread badge tracking with `ValueNotifier`
 - Push notifications via `flutter_local_notifications`
 
@@ -155,30 +158,33 @@ Flutter (Employee)                Spring Boot Backend              Flutter (Admi
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Flutter SDK 3.x
 - Java 17+
 - Oracle Database
 - Android Studio / VS Code
 
 ### 1️⃣ Clone the Repository
+
 ```bash
 git clone https://github.com/anchitchourasia/App.git
 cd App
 ```
 
 ### 2️⃣ Backend Setup
+
 ```bash
 cd backend/demo
 
-# Configure your Oracle DB in:
-# src/main/resources/application.properties
+# Configure Oracle DB in application.properties
 # Set: spring.datasource.url, username, password
 
 ./mvnw spring-boot:run
-# Backend starts on http://localhost:8080
+# Starts on http://localhost:8080
 ```
 
 ### 3️⃣ Flutter App Setup
+
 ```bash
 cd HEG
 
@@ -214,6 +220,7 @@ flutter run
 ## ⚙️ Configuration
 
 ### `application.properties` (Backend)
+
 ```properties
 app.api-key=YOUR_SECRET_KEY
 spring.datasource.url=jdbc:oracle:thin:@//HOST:1521/DB
@@ -224,6 +231,7 @@ spring.servlet.multipart.max-file-size=10MB
 ```
 
 ### `.env` (Flutter)
+
 ```env
 BASE_URL=http://10.0.2.2:8080
 ```
@@ -248,4 +256,3 @@ BASE_URL=http://10.0.2.2:8080
 **HEG HRMS** — Built with ❤️ using Flutter & Spring Boot
 
 </div>
-]]>
