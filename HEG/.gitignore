@@ -58,4 +58,7 @@ gradle-*-all.zip
 **/build/
 **/HEG/build/
 .pub-cache/
-.env
+# Allow placeholder .env in assets (real values injected by Jenkins)
+!assets/.env
+.vscode/
+HEG/devtools_options.yaml
