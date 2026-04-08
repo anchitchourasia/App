@@ -53,7 +53,7 @@ public class InsuranceService {
     if (updated == 0) throw new NotFoundException("Insurance id not found: " + id);
   }
 
-  public void uploadPdf(long id, MultipartFile file, String uploadedBy) throws Exception {
+ public void uploadPdf(long id, MultipartFile file, String uploadedBy) throws java.io.IOException {
     if (repo.getOwnerUserId(id).isEmpty()) {
       throw new NotFoundException("Insurance id not found: " + id);
     }

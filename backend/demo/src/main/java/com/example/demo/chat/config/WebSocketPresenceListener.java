@@ -92,9 +92,9 @@ public class WebSocketPresenceListener {
             return principal.getName().trim();
         }
 
-        Object attrUserId = accessor.getSessionAttributes() != null
-                ? accessor.getSessionAttributes().get("userId")
-                : null;
+        Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
+        Object attrUserId = (sessionAttrs != null) ? sessionAttrs.get("userId") : null;
+                
 
         if (attrUserId != null && !attrUserId.toString().isBlank()) {
             return attrUserId.toString().trim();
