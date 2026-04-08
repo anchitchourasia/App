@@ -118,6 +118,13 @@ echo APK_FOUND
                 }
             }
         }
+        stage('Copy Dependencies') {
+            steps {
+                dir("${env.BACKEND_DIR}") {
+                    bat "mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q"
+                }
+            }
+        }
 
         stage('SonarQube Analysis - Backend') {
             steps {
@@ -131,7 +138,7 @@ echo APK_FOUND
                                     -Dsonar.projectKey=HEG-HRMS ^
                                     -Dsonar.projectName=HEG-HRMS ^
                                     -Dsonar.host.url=http://localhost:9000 ^
-                                    -Dsonar.login=%SONAR_TOKEN% ^
+                                    -Dsonar.token=%SONAR_TOKEN% ^
                                     -Dsonar.sources=src/main/java ^
                                     -Dsonar.java.binaries=target/classes
                                 """
