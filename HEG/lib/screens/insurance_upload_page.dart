@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +12,8 @@ import '../data/insurance_api.dart';
 import 'insurance_details_page.dart';
 
 class InsuranceUploadPage extends StatefulWidget {
+  const InsuranceUploadPage({super.key});
+
   @override
   State<InsuranceUploadPage> createState() => _InsuranceUploadPageState();
 }
@@ -493,7 +494,7 @@ class _InsuranceUploadPageState extends State<InsuranceUploadPage> {
           padding: const EdgeInsets.all(16),
           children: [
             DropdownButtonFormField<String>(
-              value: _adminStatusFilter,
+              initialValue: _adminStatusFilter,
               items: const [
                 DropdownMenuItem(value: 'ALL', child: Text('All')),
                 DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
@@ -538,7 +539,7 @@ class _InsuranceUploadPageState extends State<InsuranceUploadPage> {
               child: Column(
                 children: [
                   DropdownButtonFormField<String>(
-                    value: _vehicleType,
+                    initialValue: _vehicleType,
                     items: const [
                       DropdownMenuItem(
                         value: 'Two Wheeler',
@@ -566,7 +567,7 @@ class _InsuranceUploadPageState extends State<InsuranceUploadPage> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _insuranceType,
+                    initialValue: _insuranceType,
                     items: const [
                       DropdownMenuItem(
                         value: 'Comprehensive',

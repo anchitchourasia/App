@@ -149,7 +149,7 @@ class InsuranceDb {
 
       for (final n in serverList) {
         if (n is! Map) continue;
-        final m = Map<String, dynamic>.from(n as Map);
+        final m = Map<String, dynamic>.from(n);
 
         String serverId = (m['id'] ?? m['_id'] ?? m['notificationId'] ?? '')
             .toString()
@@ -203,7 +203,7 @@ class InsuranceDb {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
 
-    Future<Database> _open() async {
+    Future<Database> open() async {
       return openDatabase(
         path,
         version: _dbVersion,
@@ -222,10 +222,10 @@ class InsuranceDb {
     }
 
     try {
-      _db = await _open();
+      _db = await open();
     } catch (_) {
       await deleteDatabase(path);
-      _db = await _open();
+      _db = await open();
     }
 
     return _db!;
