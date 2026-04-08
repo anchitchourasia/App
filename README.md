@@ -2,7 +2,7 @@
 
 <img src="https://img.shields.io/badge/HEG-HRMS-0EA5A4?style=for-the-badge&logoColor=white" height="50"/>
 
-# 🏢 HEG HRMS
+# 🏢 HRMS
 ### Human Resource Management System
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
