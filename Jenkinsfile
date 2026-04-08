@@ -122,7 +122,6 @@ echo APK_FOUND
         stage('Copy Dependencies') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    // ✅ FIXED: using full MVN_CMD path instead of bare 'mvn'
                     bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" dependency:copy-dependencies -DoutputDirectory=target/dependency -q"
                 }
             }
@@ -152,6 +151,15 @@ echo APK_FOUND
             }
         }
 
+        // ✅ NEW: Quality Gate stage — Jenkins will FAIL if SonarQube fails
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
         stage('Archive Artifacts') {
             steps {
                 archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: false
@@ -163,10 +171,10 @@ echo APK_FOUND
 
     post {
         success {
-            echo 'SUCCESS: Backend JAR and Flutter APK built successfully!'
+            echo 'SUCCESS: Backend JAR and Flutter APK built successfully! Quality Gate passed.'
         }
         failure {
-            echo 'FAILED: Check Console Output for errors.'
+            echo 'FAILED: Check Console Output for errors. Quality Gate may have failed.'
         }
         always {
             echo 'Pipeline finished.'
