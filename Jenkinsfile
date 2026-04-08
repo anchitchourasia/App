@@ -34,7 +34,8 @@ pipeline {
         stage('Build Spring Boot Backend') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean package -DskipTests -U"
+                    // ✅ FIX 1: changed from 'clean package -DskipTests' to 'clean verify'
+                    bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean verify -U"
                 }
             }
         }
@@ -122,7 +123,6 @@ echo APK_FOUND
         stage('Copy Dependencies') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    // ✅ FIXED: using full MVN_CMD path instead of bare 'mvn'
                     bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" dependency:copy-dependencies -DoutputDirectory=target/dependency -q"
                 }
             }
@@ -143,7 +143,8 @@ echo APK_FOUND
                                     -Dsonar.token=%SONAR_TOKEN% ^
                                     -Dsonar.sources=src/main/java ^
                                     -Dsonar.java.binaries=target/classes ^
-                                    -Dsonar.java.libraries=target/dependency
+                                    -Dsonar.java.libraries=target/dependency ^
+                                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                                 """
                             }
                         }
