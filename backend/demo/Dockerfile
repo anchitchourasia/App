@@ -1,25 +1,30 @@
-# ─── Stage 1: Build the JAR ───────────────────────────
+# ─── Stage 1: Build the JAR using Maven ───────────────
 FROM maven:3.9.6-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
-# Copy pom.xml and source code
+# Copy pom.xml first (Docker cache optimization)
 COPY pom.xml .
+
+# Download dependencies separately so they get cached
+RUN mvn dependency:go-offline -B
+
+# Now copy source code
 COPY src ./src
 
-# Build the JAR, skip tests (tests run in Jenkins separately)
+# Build the JAR — skip tests (Jenkins already runs them separately)
 RUN mvn clean package -DskipTests
 
-# ─── Stage 2: Run the JAR ─────────────────────────────
-FROM eclipse-temurin:17-jdk-alpine
+# ─── Stage 2: Run the JAR (lightweight image) ─────────
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
 # Copy only the built JAR from Stage 1
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build /app/target/demo-0.0.1-SNAPSHOT.jar app.jar
 
-# Expose the port your Spring Boot app runs on
+# Expose Spring Boot default port
 EXPOSE 8080
 
-# Run the app
+# Run
 ENTRYPOINT ["java", "-jar", "app.jar"]
