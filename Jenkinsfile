@@ -20,6 +20,10 @@ pipeline {
         ANDROID_HOME     = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         PUB_CACHE        = 'C:\\flutter\\.pub-cache'
+
+        // ✅ NEW: Docker image config
+        DOCKER_IMAGE = 'heg-backend'
+        DOCKER_TAG   = "build-${BUILD_NUMBER}"
     }
 
     stages {
@@ -34,7 +38,6 @@ pipeline {
         stage('Build Spring Boot Backend') {
             steps {
                 dir("${env.BACKEND_DIR}") {
-                    // ✅ FIX 1: changed from 'clean package -DskipTests' to 'clean verify'
                     bat "\"%MVN_CMD%\" -s \"%MVN_SETTINGS%\" clean verify -U"
                 }
             }
@@ -153,6 +156,33 @@ echo APK_FOUND
             }
         }
 
+        // ✅ NEW STAGE: Docker Build
+        stage('Docker Build - Backend') {
+            steps {
+                script {
+                    dir("${env.BACKEND_DIR}") {
+                        bat """
+                            echo ====== Building Docker Image ======
+                            docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                            docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest
+                            echo ====== Docker Build Done ======
+                        """
+                    }
+                }
+            }
+        }
+
+        // ✅ NEW STAGE: Docker Verify
+        stage('Docker Verify - Backend') {
+            steps {
+                bat """
+                    echo ====== Verifying Docker Image ======
+                    docker images %DOCKER_IMAGE%
+                    echo ====== Docker Image Verified ======
+                """
+            }
+        }
+
         stage('Archive Artifacts') {
             steps {
                 archiveArtifacts artifacts: "${env.BACKEND_DIR}/target/*.jar", allowEmptyArchive: false
@@ -164,7 +194,7 @@ echo APK_FOUND
 
     post {
         success {
-            echo 'SUCCESS: Backend JAR and Flutter APK built successfully!'
+            echo 'SUCCESS: Backend JAR, Flutter APK, and Docker image built successfully!'
         }
         failure {
             echo 'FAILED: Check Console Output for errors.'
