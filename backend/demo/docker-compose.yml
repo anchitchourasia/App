@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  heg-backend:
+    image: heg-backend:latest
+    container_name: heg-backend-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//192.168.9.34:1521/baan
+      - SPRING_DATASOURCE_USERNAME=scott
+      - SPRING_DATASOURCE_PASSWORD=tiger
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
+    restart: unless-stopped
+    networks:
+      - heg-network
+
+networks:
+  heg-network:
+    driver: bridge

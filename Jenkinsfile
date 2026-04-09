@@ -206,8 +206,18 @@ echo APK_FOUND
                 }
             }
         }
-
-
+        stage('Docker Run - Backend') {
+            steps {
+                dir("${env.BACKEND_DIR}") {
+                   bat """
+                       echo ====== Starting Backend Container ======
+                       docker compose down --remove-orphans
+                       docker compose up -d
+                       echo ====== Backend Container Started ======
+                    """
+                }
+            }
+        }
         // ✅ Docker Verify - unchanged
         stage('Docker Verify - Backend') {
             steps {
