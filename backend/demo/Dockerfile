@@ -1,6 +1,11 @@
 # ─── Stage 1: Build the JAR using Maven ───────────────
 FROM maven:3.9.6-eclipse-temurin-17 AS build
 
+# ✅ Accept proxy build args
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
 WORKDIR /app
 
 # Copy pom.xml first (Docker cache optimization)
@@ -15,8 +20,14 @@ COPY src ./src
 # Build the JAR — skip tests (Jenkins already runs them separately)
 RUN mvn clean package -DskipTests
 
+
 # ─── Stage 2: Run the JAR (lightweight image) ─────────
 FROM eclipse-temurin:17-jre-alpine
+
+# ✅ Accept proxy build args
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 
 WORKDIR /app
 
