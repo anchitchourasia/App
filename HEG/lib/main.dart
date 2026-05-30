@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:hive_flutter/hive_flutter.dart'; // ✅ add for offline cache (Hive)
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'data/insurance_db.dart';
-import 'data/session_store.dart'; // ✅ add this
+import 'data/session_store.dart';
 import 'screens/login_page.dart';
 import 'screens/home_page.dart';
 import 'screens/attendance_page.dart';
@@ -12,17 +12,17 @@ import 'screens/employee_details_page.dart';
 import 'screens/settings_page.dart';
 import 'screens/profile_page.dart';
 
-// New module screens
+// Existing module screens
 import 'screens/insurance_upload_page.dart';
 import 'screens/leave_apply_page.dart';
-import 'screens/vehicle_tracking_page.dart';
 import 'screens/self_service_portal_page.dart';
 import 'screens/overtime_management_page.dart';
 import 'screens/manpower_dashboard_page.dart';
 import 'screens/notifications_page.dart';
-
-// ✅ NEW: Applicants page
 import 'screens/applicants_page.dart';
+
+// ✅ VPMS: replaces vehicle_tracking_page.dart
+import 'screens/vpms/vpms_dashboard_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      initialRoute: startRoute, // ✅ dynamic initial route
+      initialRoute: startRoute,
       routes: <String, WidgetBuilder>{
         '/login': (_) => const LoginPage(),
         '/home': (_) => const HomePage(),
@@ -63,14 +63,15 @@ class MyApp extends StatelessWidget {
 
         '/insuranceUpload': (_) => InsuranceUploadPage(),
         '/leaveApply': (_) => LeaveApplyPage(),
-        '/vehicleTracking': (_) => VehicleTrackingPage(),
         '/selfServicePortal': (_) => SelfServicePortalPage(),
         '/overtimeManagement': (_) => OvertimeManagementPage(),
         '/manpowerDashboard': (_) => ManpowerDashboardPage(),
         '/notifications': (_) => NotificationsPage(),
-
-        // ✅ NEW route
         '/applicants': (_) => const ApplicantsPage(),
+
+        // ✅ VPMS — Vehicle Pass Management System
+        // Old: '/vehicleTracking': (_) => VehicleTrackingPage(),
+        '/vehicleTracking': (_) => const VpmsDashboardPage(),
       },
     );
   }
