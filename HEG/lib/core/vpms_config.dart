@@ -1,6 +1,7 @@
 // lib/core/vpms_config.dart
 
 import '../models/vehicle_model.dart';
+import '../models/pass_model.dart';
 
 class VpmsConfig {
   VpmsConfig._();
@@ -16,14 +17,19 @@ class VpmsConfig {
 
   static const String apiKey = 'VPMS_SECRET_KEY_2026';
 
+  // ── Vehicle endpoints ─────────────────────────────
   static const String vehicles = '$baseUrl/api/vehicles/list';
   static const String vehicleRegister = '$baseUrl/api/vehicles/register';
   static const String vehicleUpdate = '$baseUrl/api/vehicles/update';
   static const String vehicleDelete = '$baseUrl/api/vehicles/delete';
 
+  // ── Pass Registry endpoints ───────────────────────
+  static const String passes = '$baseUrl/api/passes/list';
+  static const String passIssue = '$baseUrl/api/passes/issue';
+  static const String passUpdate = '$baseUrl/api/passes/update';
+
   // ════════════════════════════════════════════════════
-  // 📦 DUMMY DATA — mirrors Angular's DUMMY_VEHICLES
-  //    same 11 records you see in your web UI table
+  // 📦 DUMMY — Vehicles Master (11 records)
   // ════════════════════════════════════════════════════
   static final List<VehicleModel> dummyVehicles = [
     VehicleModel(
@@ -124,6 +130,213 @@ class VpmsConfig {
       brandModel: 'Royal Enfield',
       isActive: 'N',
       isBlacklisted: 'N',
+    ),
+  ];
+
+  // ════════════════════════════════════════════════════
+  // 📦 DUMMY — Pass Registry (10 records)
+  //    mirrors the web UI screenshot you shared
+  // ════════════════════════════════════════════════════
+  static final List<PassModel> dummyPasses = [
+    PassModel(
+      passId: 8,
+      issueDate: '2026-06-01',
+      validityDate: '2026-12-31',
+      employeeNo: 'EMP883940',
+      employeeCompanyNo: 'HEG001',
+      dept: 'PRODUCTION',
+      contractorCode: null,
+      gateNo: 'GATE_01',
+      parkingToBeUsed: 'P-Block',
+      vehicleId: 65,
+      typeOfVehicle: 'Four_Wheeler',
+      mobileNo: '9876543210',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Company_Employee',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 11,
+      issueDate: '2026-06-01',
+      validityDate: '2026-12-01',
+      employeeNo: null,
+      employeeCompanyNo: null,
+      dept: 'IT-INFRA',
+      contractorCode: 'CON-11',
+      gateNo: 'GATE_02',
+      parkingToBeUsed: 'A-Block',
+      vehicleId: 40,
+      typeOfVehicle: 'Commercial Truck',
+      mobileNo: '9988776655',
+      status: 'Expired',
+      isActive: 'N',
+      empType: 'Contractor',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 9,
+      issueDate: '2026-06-01',
+      validityDate: '2026-12-31',
+      employeeNo: 'EMP10023',
+      employeeCompanyNo: 'HEG002',
+      dept: 'ENGINEERING',
+      contractorCode: null,
+      gateNo: 'GATE_02',
+      parkingToBeUsed: 'B-Block',
+      vehicleId: 47,
+      typeOfVehicle: 'Two_Wheeler',
+      mobileNo: '9871234560',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Company_Employee',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 12,
+      issueDate: '2026-06-01',
+      validityDate: '2026-12-31',
+      employeeNo: null,
+      employeeCompanyNo: null,
+      dept: 'RAW_MATERIAL',
+      contractorCode: 'CONT-12',
+      gateNo: 'GATE_03',
+      parkingToBeUsed: 'Heavy Yard',
+      vehicleId: 1,
+      typeOfVehicle: 'Heavy Tipper',
+      mobileNo: '9800001111',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Contractor',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 16,
+      issueDate: '2026-06-01',
+      validityDate: '2026-06-02',
+      employeeNo: 'EMP005',
+      employeeCompanyNo: 'HEG005',
+      dept: 'IT',
+      contractorCode: null,
+      gateNo: 'GATE_01',
+      parkingToBeUsed: 'P-Block',
+      vehicleId: 82,
+      typeOfVehicle: 'bike',
+      mobileNo: '9810101010',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Company_Employee',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 19,
+      issueDate: '2026-06-02',
+      validityDate: '2026-06-03',
+      employeeNo: 'EMP005',
+      employeeCompanyNo: 'HEG003',
+      dept: 'it',
+      contractorCode: null,
+      gateNo: 'GATE_02',
+      parkingToBeUsed: null,
+      vehicleId: 83,
+      typeOfVehicle: 'bike',
+      mobileNo: '9820202020',
+      status: 'Expired',
+      isActive: 'N',
+      empType: 'Company_Employee',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-02',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 3,
+      issueDate: '2026-05-29',
+      validityDate: '2026-12-31',
+      employeeNo: 'EMP88391',
+      employeeCompanyNo: 'HEG004',
+      dept: 'PRODUCTION',
+      contractorCode: null,
+      gateNo: 'GATE_01',
+      parkingToBeUsed: 'P-Block',
+      vehicleId: 53,
+      typeOfVehicle: 'Four_Wheeler',
+      mobileNo: '9830303030',
+      status: 'Suspended',
+      isActive: 'Y',
+      empType: 'Contractor',
+      enterBy: 'ADMIN',
+      enterDate: '2026-05-29',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 10,
+      issueDate: '2026-06-01',
+      validityDate: '2026-06-02',
+      employeeNo: 'EMP88',
+      employeeCompanyNo: 'HEG006',
+      dept: 'IT',
+      contractorCode: null,
+      gateNo: 'GATE_01',
+      parkingToBeUsed: 'A-Block',
+      vehicleId: 48,
+      typeOfVehicle: 'BIKE',
+      mobileNo: '9840404040',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Company_Employee',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 17,
+      issueDate: '2026-06-15',
+      validityDate: '2027-06-15',
+      employeeNo: null,
+      employeeCompanyNo: null,
+      dept: 'QUALITY_ASSURANCE',
+      contractorCode: 'EMP-4412',
+      gateNo: 'GATE_02',
+      parkingToBeUsed: 'B-Block',
+      vehicleId: 52,
+      typeOfVehicle: 'Two_Wheeler',
+      mobileNo: '9850505050',
+      status: 'Pending',
+      isActive: 'Y',
+      empType: 'Contractor',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-15',
+      remarks: '',
+    ),
+    PassModel(
+      passId: 5,
+      issueDate: '2026-06-01',
+      validityDate: '2027-06-01',
+      employeeNo: null,
+      employeeCompanyNo: null,
+      dept: 'Human Resources',
+      contractorCode: 'EXEC-0024',
+      gateNo: 'GATE_01',
+      parkingToBeUsed: 'P-Block',
+      vehicleId: 62,
+      typeOfVehicle: 'Sedan',
+      mobileNo: '9860606060',
+      status: 'Active',
+      isActive: 'Y',
+      empType: 'Contractor',
+      enterBy: 'ADMIN',
+      enterDate: '2026-06-01',
+      remarks: '',
     ),
   ];
 }

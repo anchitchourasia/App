@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/notification_bell.dart';
 import 'vehicles/vehicles_list_page.dart';
+import '../passes/passes_list_page.dart';
 
 class VpmsDashboardPage extends StatelessWidget {
   const VpmsDashboardPage({super.key});
@@ -23,7 +24,7 @@ class VpmsDashboardPage extends StatelessWidget {
       subtitle: 'Active & inactive passes',
       icon: Icons.badge_outlined,
       color: Color(0xFF2E7D32),
-      isReady: false,
+      isReady: true,
     ),
     _VpmsModule(
       title: 'Documents',
@@ -47,7 +48,7 @@ class VpmsDashboardPage extends StatelessWidget {
     switch (index) {
       case 0:
         return const VehiclesListPage();
-      // case 1: return const PassesListPage();
+      case 1: return const PassesListPage();
       // case 2: return const DocumentsListPage();
       // case 3: return const HistoryListPage();
       default:
