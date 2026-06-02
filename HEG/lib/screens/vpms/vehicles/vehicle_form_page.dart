@@ -314,7 +314,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     required ValueChanged<String?> onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       onChanged: onChanged,
       style: const TextStyle(
         fontSize: 14,
@@ -379,7 +379,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeColor: onColor),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: onColor),
       ],
     );
   }

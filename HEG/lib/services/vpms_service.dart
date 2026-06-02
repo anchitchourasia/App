@@ -2,22 +2,25 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/vehicle_model.dart'; // ← import from YOUR existing model file
-
-const String _baseUrl =
-    'http://192.168.8.28:8090/vehiclePassManagementSystem-0.0.1-SNAPSHOT';
-const String _apiKey = 'VPMS_SECRET_KEY_2026';
+import '../models/vehicle_model.dart';
+import '../core/vpms_config.dart'; // ← THIS was missing
 
 Map<String, String> get _headers => {
-  'X-API-KEY': _apiKey,
+  'X-API-KEY': VpmsConfig.apiKey,
   'Content-Type': 'application/json',
 };
 
 class VpmsService {
   // ── GET /api/vehicles/list ──────────────────────────────
   Future<List<VehicleModel>> getVehicles() async {
+    // 🔧 DUMMY MODE
+    if (VpmsConfig.useDummyData) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      return List<VehicleModel>.from(VpmsConfig.dummyVehicles);
+    }
+    // 🌐 LIVE API
     final response = await http.get(
-      Uri.parse('$_baseUrl/api/vehicles/list'),
+      Uri.parse(VpmsConfig.vehicles),
       headers: _headers,
     );
     if (response.statusCode == 200) {
@@ -30,8 +33,30 @@ class VpmsService {
 
   // ── POST /api/vehicles/register ────────────────────────
   Future<void> registerVehicle(VehicleModel vehicle) async {
+    // 🔧 DUMMY MODE
+    if (VpmsConfig.useDummyData) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      final newId =
+          VpmsConfig.dummyVehicles
+              .map((v) => v.vehicleId ?? 0)
+              .reduce((a, b) => a > b ? a : b) +
+          1;
+      VpmsConfig.dummyVehicles.add(
+        VehicleModel(
+          vehicleId: newId,
+          vehicleNo: vehicle.vehicleNo,
+          vehicleType: vehicle.vehicleType,
+          vehicleClass: vehicle.vehicleClass,
+          brandModel: vehicle.brandModel,
+          isActive: vehicle.isActive,
+          isBlacklisted: vehicle.isBlacklisted,
+        ),
+      );
+      return;
+    }
+    // 🌐 LIVE API
     final response = await http.post(
-      Uri.parse('$_baseUrl/api/vehicles/register'),
+      Uri.parse(VpmsConfig.vehicleRegister),
       headers: _headers,
       body: jsonEncode(vehicle.toPostJson()),
     );
@@ -47,11 +72,19 @@ class VpmsService {
 
   // ── PUT /api/vehicles/update/{vehicleId} ────────────────
   Future<void> updateVehicle(VehicleModel vehicle) async {
-    if (vehicle.vehicleId == null) {
-      throw Exception('Cannot update: vehicleId is null');
+    if (vehicle.vehicleId == null) throw Exception('vehicleId is null');
+    // 🔧 DUMMY MODE
+    if (VpmsConfig.useDummyData) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      final idx = VpmsConfig.dummyVehicles.indexWhere(
+        (v) => v.vehicleId == vehicle.vehicleId,
+      );
+      if (idx != -1) VpmsConfig.dummyVehicles[idx] = vehicle;
+      return;
     }
+    // 🌐 LIVE API
     final response = await http.put(
-      Uri.parse('$_baseUrl/api/vehicles/update/${vehicle.vehicleId}'),
+      Uri.parse('${VpmsConfig.vehicleUpdate}/${vehicle.vehicleId}'),
       headers: _headers,
       body: jsonEncode(vehicle.toPutJson()),
     );
@@ -66,10 +99,16 @@ class VpmsService {
   }
 
   // ── DELETE /api/vehicles/delete/{vehicleId} ─────────────
-  // ⚠️ Backend returns plain TEXT — don't JSON decode (same as Angular's responseType:'text')
   Future<void> deleteVehicle(int vehicleId) async {
+    // 🔧 DUMMY MODE
+    if (VpmsConfig.useDummyData) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      VpmsConfig.dummyVehicles.removeWhere((v) => v.vehicleId == vehicleId);
+      return;
+    }
+    // 🌐 LIVE API — returns plain text, NOT JSON
     final response = await http.delete(
-      Uri.parse('$_baseUrl/api/vehicles/delete/$vehicleId'),
+      Uri.parse('${VpmsConfig.vehicleDelete}/$vehicleId'),
       headers: _headers,
     );
     if (response.statusCode != 200 && response.statusCode != 204) {

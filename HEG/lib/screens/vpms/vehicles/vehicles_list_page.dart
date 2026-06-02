@@ -216,7 +216,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
       backgroundColor: const Color(0xFFF0F2F8),
       appBar: AppBar(
         title: Text(
-          'Vehicles  (${_filtered.length}/${_all.length})',
+          'Vehicles  (${_all.length})',
           style: const TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
