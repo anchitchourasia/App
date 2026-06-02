@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../models/vehicle_model.dart';
 import '../../../services/vpms_service.dart';
 import 'vehicle_detail_page.dart';
-import 'vehicle_form_page.dart'; // ← new file for Add/Edit form
+import 'vehicle_form_page.dart';
+import '../../passes/pass_form_page.dart'; // ← NEW import for Issue Pass
 
 class VehiclesListPage extends StatefulWidget {
   const VehiclesListPage({super.key});
@@ -132,7 +133,6 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
 
     if (confirmed != true || !mounted) return;
 
-    // Show loading
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -165,7 +165,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
           backgroundColor: const Color(0xFF2E7D32),
         ),
       );
-      _load(); // refresh list
+      _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -184,7 +184,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
       context,
       MaterialPageRoute(builder: (_) => const VehicleFormPage()),
     );
-    if (added == true) _load(); // refresh if something was added
+    if (added == true) _load();
   }
 
   // ── Navigate to Edit form (PUT) ────────────────────────────
@@ -194,6 +194,24 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
       MaterialPageRoute(builder: (_) => VehicleFormPage(vehicle: v)),
     );
     if (edited == true) _load();
+  }
+
+  // ── NEW: Navigate to Issue Pass form with vehicleId pre-filled ──
+  Future<void> _openIssuePassForm(VehicleModel v) async {
+    final issued = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PassFormPage(prefilledVehicleId: v.vehicleId),
+      ),
+    );
+    if (issued == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pass issued for ${v.vehicleNo}'),
+          backgroundColor: const Color(0xFF2E7D32),
+        ),
+      );
+    }
   }
 
   Color _classColor(String c) => switch (c) {
@@ -283,6 +301,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
                           ),
                           onEdit: () => _openEditForm(v),
                           onDelete: () => _confirmDelete(v),
+                          onIssuePass: () => _openIssuePassForm(v), // ← NEW
                         );
                       },
                     ),
@@ -361,7 +380,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Vehicle Card — with Edit + Delete action buttons
+// Vehicle Card — Edit + Delete + Issue Pass action buttons
 // ══════════════════════════════════════════════════════════════
 class _VehicleCard extends StatelessWidget {
   final VehicleModel vehicle;
@@ -370,6 +389,7 @@ class _VehicleCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onIssuePass; // ← NEW
 
   const _VehicleCard({
     required this.vehicle,
@@ -378,6 +398,7 @@ class _VehicleCard extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    required this.onIssuePass, // ← NEW
   });
 
   @override
@@ -418,7 +439,7 @@ class _VehicleCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
               child: Row(
                 children: [
-                  // Icon
+                  // Icon block
                   Container(
                     width: 50,
                     height: 50,
@@ -519,7 +540,7 @@ class _VehicleCard extends StatelessWidget {
             ),
           ),
 
-          // ── Action buttons row (Edit | Delete) ───────
+          // ── Action buttons row (Edit | Delete | Issue Pass) ──
           Container(
             decoration: BoxDecoration(
               border: Border(
@@ -555,8 +576,9 @@ class _VehicleCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Divider
+
                 Container(width: 1, height: 32, color: Colors.grey.shade100),
+
                 // Delete button (DELETE)
                 Expanded(
                   child: TextButton.icon(
@@ -572,6 +594,34 @@ class _VehicleCard extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: Colors.red.shade600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                  ),
+                ),
+
+                Container(width: 1, height: 32, color: Colors.grey.shade100),
+
+                // ── NEW: Issue Pass button ──────────────
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: onIssuePass,
+                    icon: const Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 16,
+                      color: Color(0xFF1B5E20),
+                    ),
+                    label: const Text(
+                      'Issue Pass',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1B5E20),
                       ),
                     ),
                     style: TextButton.styleFrom(
@@ -602,7 +652,7 @@ class _VehicleCard extends StatelessWidget {
   }
 }
 
-// ── Chip row, ErrorView, EmptyView (same as before) ───────────
+// ── Chip Row ──────────────────────────────────────────────────
 class _ChipRow extends StatelessWidget {
   final String label;
   final List<String> options;
@@ -676,6 +726,7 @@ class _ChipRow extends StatelessWidget {
   }
 }
 
+// ── Error View ────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -734,6 +785,7 @@ class _ErrorView extends StatelessWidget {
   );
 }
 
+// ── Empty View ────────────────────────────────────────────────
 class _EmptyView extends StatelessWidget {
   const _EmptyView();
   @override
