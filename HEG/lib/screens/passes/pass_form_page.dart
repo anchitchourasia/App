@@ -579,7 +579,7 @@ class _PassFormPageState extends State<PassFormPage> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: _gates.contains(_gateNo) ? _gateNo : 'GATE_01',
+                        initialValue: _gates.contains(_gateNo) ? _gateNo : 'GATE_01',
                         onChanged: (v) => setState(() => _gateNo = v!),
                         decoration: _inputDeco(),
                         items: _gates
@@ -618,7 +618,7 @@ class _PassFormPageState extends State<PassFormPage> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: _statuses.contains(_status) ? _status : 'Active',
+                        initialValue: _statuses.contains(_status) ? _status : 'Active',
                         onChanged: (v) => setState(() => _status = v!),
                         decoration: _inputDeco(),
                         items: _statuses
@@ -651,7 +651,7 @@ class _PassFormPageState extends State<PassFormPage> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: _isActive,
+                        initialValue: _isActive,
                         onChanged: (v) => setState(() => _isActive = v!),
                         decoration: _inputDeco(),
                         items: const [
