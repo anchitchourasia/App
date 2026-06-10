@@ -1,11 +1,13 @@
 // lib/screens/vpms/vehicles/vehicles_list_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/vehicle_model.dart';
+import '../../../models/pass_model.dart'; // ← uses PassModel directly
 import '../../../services/vpms_service.dart';
 import 'vehicle_detail_page.dart';
 import 'vehicle_form_page.dart';
-import '../../passes/pass_form_page.dart'; // ← NEW import for Issue Pass
+// NOTE: pass_form_page.dart import removed — Issue Pass is now inline bottom sheet
 
 class VehiclesListPage extends StatefulWidget {
   const VehiclesListPage({super.key});
@@ -76,7 +78,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
     setState(() {});
   }
 
-  // ── DELETE with confirm dialog ─────────────────────────────
+  // ── DELETE ──────────────────────────────────────────────────
   Future<void> _confirmDelete(VehicleModel v) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -178,7 +180,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
     }
   }
 
-  // ── Navigate to Add form (POST) ────────────────────────────
+  // ── ADD ──────────────────────────────────────────────────────
   Future<void> _openAddForm() async {
     final added = await Navigator.push<bool>(
       context,
@@ -187,7 +189,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
     if (added == true) _load();
   }
 
-  // ── Navigate to Edit form (PUT) ────────────────────────────
+  // ── EDIT ─────────────────────────────────────────────────────
   Future<void> _openEditForm(VehicleModel v) async {
     final edited = await Navigator.push<bool>(
       context,
@@ -196,22 +198,76 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
     if (edited == true) _load();
   }
 
-  // ── NEW: Navigate to Issue Pass form with vehicleId pre-filled ──
-  Future<void> _openIssuePassForm(VehicleModel v) async {
-    final issued = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PassFormPage(prefilledVehicleId: v.vehicleId),
-      ),
-    );
-    if (issued == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Pass issued for ${v.vehicleNo}'),
-          backgroundColor: const Color(0xFF2E7D32),
+  // ── ISSUE PASS — with all web UI restrictions ────────────────
+  void _openIssuePassModal(VehicleModel v) {
+    // RESTRICTION 1: Block blacklisted ← same as web openIssuePassModal()
+    if (v.isBlacklistedVehicle) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.block, color: Colors.red, size: 22),
+              SizedBox(width: 8),
+              Text(
+                'Cannot Issue Pass',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              children: [
+                const TextSpan(text: 'Vehicle '),
+                TextSpan(
+                  text: v.vehicleNo,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A237E),
+                  ),
+                ),
+                const TextSpan(text: ' is '),
+                const TextSpan(
+                  text: 'BLACKLISTED',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const TextSpan(
+                  text: '.\n\nPass cannot be issued for a blacklisted vehicle.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A237E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('OK'),
+            ),
+          ],
         ),
       );
+      return; // stop — do NOT open the form
     }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _IssuePassSheet(vehicle: v, service: _service),
+    );
   }
 
   Color _classColor(String c) => switch (c) {
@@ -252,8 +308,6 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
           ),
         ],
       ),
-
-      // ── FAB = Add Vehicle (POST) ───────────────────────────
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openAddForm,
         backgroundColor: const Color(0xFFE65100),
@@ -264,7 +318,6 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
-
       body: Column(
         children: [
           _buildFilterBar(),
@@ -301,7 +354,7 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
                           ),
                           onEdit: () => _openEditForm(v),
                           onDelete: () => _confirmDelete(v),
-                          onIssuePass: () => _openIssuePassForm(v), // ← NEW
+                          onIssuePass: () => _openIssuePassModal(v),
                         );
                       },
                     ),
@@ -380,7 +433,770 @@ class _VehiclesListPageState extends State<VehiclesListPage> {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Vehicle Card — Edit + Delete + Issue Pass action buttons
+// ISSUE PASS BOTTOM SHEET
+// All restrictions from web vehicles.ts / vehicles.html
+// Uses existing issuePass(PassModel) — no new service method needed
+// ══════════════════════════════════════════════════════════════
+class _IssuePassSheet extends StatefulWidget {
+  final VehicleModel vehicle;
+  final VpmsService service;
+  const _IssuePassSheet({required this.vehicle, required this.service});
+  @override
+  State<_IssuePassSheet> createState() => _IssuePassSheetState();
+}
+
+class _IssuePassSheetState extends State<_IssuePassSheet> {
+  bool _saving = false;
+  String? _error;
+  String? _success;
+
+  String _empType = 'Company_Employee';
+  String _gateNo = '';
+
+  final _employeeNoCtrl = TextEditingController();
+  final _empCompanyNoCtrl = TextEditingController();
+  final _contractorCodeCtrl = TextEditingController();
+  final _deptCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
+  final _issueDateCtrl = TextEditingController();
+  final _validityDateCtrl = TextEditingController();
+  final _parkingCtrl = TextEditingController();
+  final _remarksCtrl = TextEditingController();
+
+  static const _gates = ['GATE_01', 'GATE_02', 'GATE_03', 'GATE_04'];
+
+  @override
+  void dispose() {
+    for (final c in [
+      _employeeNoCtrl,
+      _empCompanyNoCtrl,
+      _contractorCodeCtrl,
+      _deptCtrl,
+      _mobileCtrl,
+      _issueDateCtrl,
+      _validityDateCtrl,
+      _parkingCtrl,
+      _remarksCtrl,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController ctrl) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(ctrl.text) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      builder: (ctx, child) => Theme(
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: Color(0xFF1A237E)),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      ctrl.text =
+          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    }
+  }
+
+  // Validation order matches web submitIssuePass() exactly
+  Future<void> _submit() async {
+    setState(() {
+      _error = null;
+      _success = null;
+    });
+
+    if (_issueDateCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Issue Date is required.');
+      return;
+    }
+    if (_validityDateCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Validity Date is required.');
+      return;
+    }
+    if (_gateNo.isEmpty) {
+      setState(() => _error = 'Gate No is required.');
+      return;
+    }
+    if (_empType == 'Company_Employee' && _employeeNoCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Employee No is required.');
+      return;
+    }
+    if (_empType == 'Contractor' && _contractorCodeCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Contractor Code is required.');
+      return;
+    }
+
+    setState(() => _saving = true);
+
+    // ── Build PassModel — payload matches web submitIssuePass() exactly ──
+    final pass = PassModel(
+      vehicleId: widget.vehicle.vehicleId,
+      typeOfVehicle: widget.vehicle.vehicleType,
+      empType: _empType,
+      issueDate: _issueDateCtrl.text.trim(),
+      validityDate: _validityDateCtrl.text.trim(),
+      gateNo: _gateNo,
+      parkingToBeUsed: _parkingCtrl.text.trim().isEmpty
+          ? null
+          : _parkingCtrl.text.trim().toUpperCase(),
+      status: 'Active', // hardcoded — matches web
+      isActive: 'Y', // hardcoded — matches web
+      remarks: _remarksCtrl.text.trim().isEmpty
+          ? null
+          : _remarksCtrl.text.trim(),
+      enterBy: 'ADMIN',
+      enterDate: DateTime.now().toIso8601String().split('T')[0],
+      dept: _deptCtrl.text.trim().isEmpty ? null : _deptCtrl.text.trim(),
+      mobileNo: _mobileCtrl.text.trim().isEmpty
+          ? null
+          : _mobileCtrl.text.trim(),
+      employeeNo: _empType == 'Company_Employee'
+          ? (_employeeNoCtrl.text.trim().isEmpty
+                ? null
+                : _employeeNoCtrl.text.trim())
+          : null,
+      employeeCompanyNo: _empType == 'Company_Employee'
+          ? (_empCompanyNoCtrl.text.trim().isEmpty
+                ? null
+                : _empCompanyNoCtrl.text.trim())
+          : null,
+      contractorCode: _empType == 'Contractor'
+          ? (_contractorCodeCtrl.text.trim().isEmpty
+                ? null
+                : _contractorCodeCtrl.text.trim())
+          : null,
+    );
+
+    try {
+      await widget.service.issuePass(
+        pass,
+      ); // ← uses existing method, no issuePassRaw needed
+      setState(
+        () => _success =
+            '✅ Pass issued successfully for ${widget.vehicle.vehicleNo}!',
+      );
+      await Future.delayed(const Duration(milliseconds: 1400));
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _saving = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.vehicle;
+    return DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.97,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF0F2F8),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 4, 14, 12),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.confirmation_number_outlined,
+                    color: Color(0xFF1A237E),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Issue Pass',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1A237E),
+                          ),
+                        ),
+                        Text(
+                          v.vehicleNo,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 22),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // scrollable form
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // ── SECTION 1: Vehicle Details — READ-ONLY, auto-filled ──
+                    _section(
+                      title: 'VEHICLE DETAILS',
+                      badge: 'Auto-filled',
+                      color: const Color(0xFF1565C0),
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _readonlyField(
+                                'Vehicle ID',
+                                '${v.vehicleId ?? '—'}',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _readonlyField('Vehicle No', v.vehicleNo),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _readonlyField('Type', v.vehicleType),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _readonlyField(
+                                'Class',
+                                v.vehicleClass.replaceAll('_', ' '),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── SECTION 2: Person Details ──
+                    _section(
+                      title: 'PERSON DETAILS',
+                      color: const Color(0xFFE65100),
+                      children: [
+                        const Text(
+                          'EMPLOYEE TYPE *',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF37474F),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: ['Company_Employee', 'Contractor'].map((t) {
+                            final sel = _empType == t;
+                            return Expanded(
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  right: t == 'Company_Employee' ? 8 : 0,
+                                ),
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _empType = t),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 11,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: sel
+                                          ? const Color(0xFF1A237E)
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: sel
+                                            ? const Color(0xFF1A237E)
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          sel
+                                              ? Icons.radio_button_checked
+                                              : Icons.radio_button_off,
+                                          size: 15,
+                                          color: sel
+                                              ? Colors.white
+                                              : Colors.grey.shade500,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          t == 'Company_Employee'
+                                              ? 'Company Emp.'
+                                              : 'Contractor',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: sel
+                                                ? Colors.white
+                                                : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Company Employee fields
+                        if (_empType == 'Company_Employee') ...[
+                          _inputField(
+                            label: 'EMPLOYEE NO *',
+                            ctrl: _employeeNoCtrl,
+                            hint: 'e.g. EMP001',
+                            formatters: [
+                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              _UpperCaseFormatter(),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _inputField(
+                            label: 'EC NO (COMPANY NO)',
+                            ctrl: _empCompanyNoCtrl,
+                            hint: 'e.g. HEG001',
+                            formatters: [
+                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              _UpperCaseFormatter(),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _inputField(
+                            label: 'DEPARTMENT',
+                            ctrl: _deptCtrl,
+                            hint: 'e.g. Mechanical',
+                          ),
+                        ] else ...[
+                          // Contractor fields
+                          _inputField(
+                            label: 'CONTRACTOR CODE *',
+                            ctrl: _contractorCodeCtrl,
+                            hint: 'e.g. CON001',
+                            formatters: [
+                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              _UpperCaseFormatter(),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _inputField(
+                            label: 'WORK AREA / DEPT',
+                            ctrl: _deptCtrl,
+                            hint: 'e.g. Civil Works',
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+
+                        // Mobile — digits only, max 10
+                        _inputField(
+                          label: 'MOBILE NO',
+                          ctrl: _mobileCtrl,
+                          hint: 'e.g. 9876543210',
+                          keyboard: TextInputType.phone,
+                          maxLength: 10,
+                          formatters: [FilteringTextInputFormatter.digitsOnly],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── SECTION 3: Pass Details ──
+                    _section(
+                      title: 'PASS DETAILS',
+                      color: const Color(0xFF2E7D32),
+                      children: [
+                        _dateField('ISSUE DATE *', _issueDateCtrl),
+                        const SizedBox(height: 12),
+                        _dateField('VALIDITY DATE *', _validityDateCtrl),
+                        const SizedBox(height: 12),
+
+                        // Gate No — required dropdown
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'GATE NO *',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF37474F),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              initialValue: _gates.contains(_gateNo) ? _gateNo : null,
+                              hint: const Text(
+                                '-- Select Gate --',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              onChanged: (val) =>
+                                  setState(() => _gateNo = val ?? ''),
+                              decoration: _inputDeco(),
+                              items: _gates
+                                  .map(
+                                    (g) => DropdownMenuItem(
+                                      value: g,
+                                      child: Text(
+                                        g.replaceAll('_', ' '),
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Parking — auto UPPERCASE
+                        _inputField(
+                          label: 'PARKING TO BE USED',
+                          ctrl: _parkingCtrl,
+                          hint: 'e.g. A-BLOCK, HEAVY YARD',
+                          formatters: [_UpperCaseFormatter()],
+                        ),
+                        const SizedBox(height: 12),
+                        _inputField(
+                          label: 'REMARKS',
+                          ctrl: _remarksCtrl,
+                          hint: 'Any remarks...',
+                          maxLines: 3,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Error / Success banners
+                    if (_error != null) _banner(msg: _error!, isError: true),
+                    if (_success != null)
+                      _banner(msg: _success!, isError: false),
+
+                    // Submit button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _saving ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1A237E),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.send, size: 18),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Issue Pass',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── HELPERS ──────────────────────────────────────────────────
+
+  Widget _section({
+    required String title,
+    required Color color,
+    String? badge,
+    required List<Widget> children,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 3,
+              height: 16,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: color,
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: color.withOpacity(0.3)),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        Divider(height: 20, color: Colors.grey.shade100),
+        ...children,
+      ],
+    ),
+  );
+
+  InputDecoration _inputDeco({String? hint}) => InputDecoration(
+    hintText: hint,
+    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: Colors.grey.shade200),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: Colors.grey.shade200),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: Color(0xFF1A237E), width: 1.8),
+    ),
+    filled: true,
+    fillColor: const Color(0xFFF9FAFB),
+  );
+
+  Widget _readonlyField(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF37474F),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.lock_outline, size: 13, color: Colors.grey),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A237E),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _inputField({
+    required String label,
+    required TextEditingController ctrl,
+    String? hint,
+    int maxLines = 1,
+    int? maxLength,
+    TextInputType keyboard = TextInputType.text,
+    List<TextInputFormatter> formatters = const [],
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF37474F),
+        ),
+      ),
+      const SizedBox(height: 8),
+      TextFormField(
+        controller: ctrl,
+        maxLines: maxLines,
+        maxLength: maxLength,
+        keyboardType: keyboard,
+        inputFormatters: formatters,
+        style: const TextStyle(fontSize: 14),
+        decoration: _inputDeco(hint: hint).copyWith(counterText: ''),
+      ),
+    ],
+  );
+
+  Widget _dateField(String label, TextEditingController ctrl) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF37474F),
+        ),
+      ),
+      const SizedBox(height: 8),
+      TextFormField(
+        controller: ctrl,
+        readOnly: true,
+        style: const TextStyle(fontSize: 14),
+        decoration: _inputDeco().copyWith(
+          suffixIcon: const Icon(
+            Icons.calendar_today_outlined,
+            size: 18,
+            color: Color(0xFF1A237E),
+          ),
+        ),
+        onTap: () => _pickDate(ctrl),
+      ),
+    ],
+  );
+
+  Widget _banner({required String msg, required bool isError}) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: isError ? Colors.red.shade50 : Colors.green.shade50,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: isError ? Colors.red.shade200 : Colors.green.shade200,
+      ),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          isError ? Icons.error_outline : Icons.check_circle_outline,
+          size: 18,
+          color: isError ? Colors.red.shade600 : Colors.green.shade700,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            msg,
+            style: TextStyle(
+              fontSize: 13,
+              color: isError ? Colors.red.shade700 : Colors.green.shade700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// ── UPPERCASE text formatter ───────────────────────────────────
+class _UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) => newValue.copyWith(text: newValue.text.toUpperCase());
+}
+
+// ══════════════════════════════════════════════════════════════
+// Vehicle Card
 // ══════════════════════════════════════════════════════════════
 class _VehicleCard extends StatelessWidget {
   final VehicleModel vehicle;
@@ -389,7 +1205,7 @@ class _VehicleCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onIssuePass; // ← NEW
+  final VoidCallback onIssuePass;
 
   const _VehicleCard({
     required this.vehicle,
@@ -398,7 +1214,7 @@ class _VehicleCard extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
-    required this.onIssuePass, // ← NEW
+    required this.onIssuePass,
   });
 
   @override
@@ -431,7 +1247,6 @@ class _VehicleCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Main info row (tap → detail) ─────────────
           InkWell(
             onTap: onTap,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
@@ -439,7 +1254,6 @@ class _VehicleCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
               child: Row(
                 children: [
-                  // Icon block
                   Container(
                     width: 50,
                     height: 50,
@@ -450,7 +1264,6 @@ class _VehicleCard extends StatelessWidget {
                     child: Icon(classIcon, color: classColor, size: 26),
                   ),
                   const SizedBox(width: 12),
-                  // Info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,51 +1293,12 @@ class _VehicleCard extends StatelessWidget {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            // Class badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: classColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: classColor.withOpacity(0.3),
-                                ),
-                              ),
-                              child: Text(
-                                vehicle.vehicleClass.replaceAll('_', ' '),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: classColor,
-                                ),
-                              ),
+                            _badge(
+                              vehicle.vehicleClass.replaceAll('_', ' '),
+                              classColor,
                             ),
                             const SizedBox(width: 8),
-                            // Status badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: statusColor.withOpacity(0.3),
-                                ),
-                              ),
-                              child: Text(
-                                statusLabel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: statusColor,
-                                ),
-                              ),
-                            ),
+                            _badge(statusLabel, statusColor),
                           ],
                         ),
                       ],
@@ -540,7 +1314,7 @@ class _VehicleCard extends StatelessWidget {
             ),
           ),
 
-          // ── Action buttons row (Edit | Delete | Issue Pass) ──
+          // Action buttons: Edit | Delete | Issue Pass
           Container(
             decoration: BoxDecoration(
               border: Border(
@@ -549,7 +1323,6 @@ class _VehicleCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Edit button (PUT)
                 Expanded(
                   child: TextButton.icon(
                     onPressed: onEdit,
@@ -579,7 +1352,6 @@ class _VehicleCard extends StatelessWidget {
 
                 Container(width: 1, height: 32, color: Colors.grey.shade100),
 
-                // Delete button (DELETE)
                 Expanded(
                   child: TextButton.icon(
                     onPressed: onDelete,
@@ -607,21 +1379,25 @@ class _VehicleCard extends StatelessWidget {
 
                 Container(width: 1, height: 32, color: Colors.grey.shade100),
 
-                // ── NEW: Issue Pass button ──────────────
+                // Issue Pass — visually dimmed if blacklisted
                 Expanded(
                   child: TextButton.icon(
                     onPressed: onIssuePass,
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.confirmation_number_outlined,
                       size: 16,
-                      color: Color(0xFF1B5E20),
+                      color: isBlacklisted
+                          ? Colors.grey.shade400
+                          : const Color(0xFF1B5E20),
                     ),
-                    label: const Text(
+                    label: Text(
                       'Issue Pass',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1B5E20),
+                        color: isBlacklisted
+                            ? Colors.grey.shade400
+                            : const Color(0xFF1B5E20),
                       ),
                     ),
                     style: TextButton.styleFrom(
@@ -642,6 +1418,19 @@ class _VehicleCard extends StatelessWidget {
     );
   }
 
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withOpacity(0.3)),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+    ),
+  );
+
   String _typeAndBrand() {
     final type = vehicle.vehicleType.isNotEmpty ? vehicle.vehicleType : null;
     final brand = vehicle.brandModel?.isNotEmpty == true
@@ -652,7 +1441,7 @@ class _VehicleCard extends StatelessWidget {
   }
 }
 
-// ── Chip Row ──────────────────────────────────────────────────
+// ── Chip Row ───────────────────────────────────────────────────
 class _ChipRow extends StatelessWidget {
   final String label;
   final List<String> options;
@@ -664,69 +1453,68 @@ class _ChipRow extends StatelessWidget {
     required this.selected,
     required this.onSelect,
   });
+
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 46,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
-            ),
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 46,
+        child: Text(
+          '$label:',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade600,
           ),
         ),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: options.map((o) {
-                final isSel = selected == o;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
-                    onTap: () => onSelect(o),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
+      ),
+      Expanded(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: options.map((o) {
+              final isSel = selected == o;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () => onSelect(o),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSel
+                          ? const Color(0xFF1A237E)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
                         color: isSel
                             ? const Color(0xFF1A237E)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSel
-                              ? const Color(0xFF1A237E)
-                              : Colors.grey.shade300,
-                        ),
+                            : Colors.grey.shade300,
                       ),
-                      child: Text(
-                        o.replaceAll('_', ' '),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isSel ? Colors.white : Colors.grey.shade700,
-                        ),
+                    ),
+                    child: Text(
+                      o.replaceAll('_', ' '),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSel ? Colors.white : Colors.grey.shade700,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              );
+            }).toList(),
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
-// ── Error View ────────────────────────────────────────────────
+// ── Error View ─────────────────────────────────────────────────
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -785,7 +1573,7 @@ class _ErrorView extends StatelessWidget {
   );
 }
 
-// ── Empty View ────────────────────────────────────────────────
+// ── Empty View ─────────────────────────────────────────────────
 class _EmptyView extends StatelessWidget {
   const _EmptyView();
   @override

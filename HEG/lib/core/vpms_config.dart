@@ -28,6 +28,12 @@ class VpmsConfig {
   static const String passIssue = '$baseUrl/api/passes/issue';
   static const String passUpdate = '$baseUrl/api/passes/update';
 
+  // MISSING — need to add these:
+  static const String documents = '$baseUrl/api/documents/list';
+  static const String gateLogs = '$baseUrl/api/gate-logs/list';
+  static const String history = '$baseUrl/api/history/list';
+  static const String compliance = '$baseUrl/api/compliance/list';
+
   // ════════════════════════════════════════════════════
   // 📦 DUMMY — Vehicles Master (11 records)
   // ════════════════════════════════════════════════════

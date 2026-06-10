@@ -28,8 +28,8 @@ class _PassesListPageState extends State<PassesListPage> {
     'All',
     'Active',
     'Expired',
-    'Suspended',
-    'Pending',
+    'Expiring',
+    'Surrendered',
   ];
   static const _empTypeOptions = ['All', 'Company_Employee', 'Contractor'];
 
@@ -92,8 +92,8 @@ class _PassesListPageState extends State<PassesListPage> {
   Color _statusColor(String s) => switch (s.toLowerCase()) {
     'active' => const Color(0xFF1B5E20),
     'expired' => const Color(0xFFB71C1C),
-    'suspended' => const Color(0xFFE65100),
-    'pending' => const Color(0xFF1565C0),
+    'surrendered' => const Color(0xFF4A148C),
+    'expiring' => const Color(0xFFF57F17),
     _ => Colors.grey.shade600,
   };
 

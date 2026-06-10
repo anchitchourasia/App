@@ -1,16 +1,15 @@
 // lib/screens/passes/pass_form_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/pass_model.dart';
 import '../../models/vehicle_model.dart';
 import '../../services/vpms_service.dart';
 
 class PassFormPage extends StatefulWidget {
-  final PassModel? pass; // null = Issue mode, non-null = Edit mode
-  final int? prefilledVehicleId; // ← set when opening from Vehicles Master
-
+  final PassModel? pass;
+  final int? prefilledVehicleId;
   const PassFormPage({super.key, this.pass, this.prefilledVehicleId});
-
   @override
   State<PassFormPage> createState() => _PassFormPageState();
 }
@@ -25,12 +24,12 @@ class _PassFormPageState extends State<PassFormPage> {
 
   bool get _isEdit => widget.pass != null;
 
-  // ── Vehicle lookup state ─────────────────────────────
+  // ── Vehicle lookup state ──────────────────────────────
   bool _lookingUp = false;
   String? _vehicleLookupError;
   String? _vehicleLookupSuccess;
 
-  // ── Form controllers ─────────────────────────────────
+  // ── Form controllers ──────────────────────────────────
   late String _empType;
   final _employeeNoCtrl = TextEditingController();
   final _empCompanyNoCtrl = TextEditingController();
@@ -49,13 +48,15 @@ class _PassFormPageState extends State<PassFormPage> {
   late String _isActive;
 
   static const _gates = ['GATE_01', 'GATE_02', 'GATE_03', 'GATE_04'];
-  static const _statuses = ['Active', 'Expired', 'Suspended', 'Pending'];
+  // ✅ FIXED: matches web UI sidebar — Suspended/Pending removed
+  static const _statuses = ['Active', 'Expiring', 'Expired', 'Surrendered'];
 
   @override
   void initState() {
     super.initState();
     final p = widget.pass;
     _empType = p?.empType ?? 'Company_Employee';
+    // ✅ On Issue mode: status & isActive hardcoded (matches web)
     _status = p?.status ?? 'Active';
     _isActive = p?.isActive ?? 'Y';
     _gateNo = (p?.gateNo.isNotEmpty == true) ? p!.gateNo : 'GATE_01';
@@ -72,16 +73,13 @@ class _PassFormPageState extends State<PassFormPage> {
       _issueDateCtrl.text = p.issueDate;
       _validityDateCtrl.text = p.validityDate;
       _remarksCtrl.text = p.remarks ?? '';
-      // pre-show vehicle lookup success if already has type
       if ((p.typeOfVehicle ?? '').isNotEmpty) {
         _vehicleLookupSuccess = '✅ Vehicle found: ${p.typeOfVehicle}';
       }
     }
 
-    // ── Pre-fill vehicleId when launched from Vehicles Master ──
     if (widget.prefilledVehicleId != null && p == null) {
       _vehicleIdCtrl.text = '${widget.prefilledVehicleId}';
-      // auto-trigger lookup after first frame
       WidgetsBinding.instance.addPostFrameCallback((_) => _lookupVehicle());
     }
   }
@@ -106,9 +104,7 @@ class _PassFormPageState extends State<PassFormPage> {
     super.dispose();
   }
 
-  // ══════════════════════════════════════════════════════
-  // VEHICLE ID LOOKUP  (matches web onVehicleIdBlur)
-  // ══════════════════════════════════════════════════════
+  // ── Vehicle ID Lookup ─────────────────────────────────
   Future<void> _lookupVehicle() async {
     final idStr = _vehicleIdCtrl.text.trim();
     setState(() {
@@ -117,26 +113,33 @@ class _PassFormPageState extends State<PassFormPage> {
       _vehicleTypeCtrl.text = '';
     });
     if (idStr.isEmpty || idStr == '0') return;
-
     final id = int.tryParse(idStr);
     if (id == null) {
       setState(() => _vehicleLookupError = 'Vehicle ID must be a number.');
       return;
     }
-
     setState(() => _lookingUp = true);
-
     try {
-      final List<VehicleModel> vehicles = await _service.getVehicles();
+      final vehicles = await _service.getVehicles();
       final found = vehicles.cast<VehicleModel?>().firstWhere(
         (v) => v?.vehicleId == id,
         orElse: () => null,
       );
       if (found != null) {
-        setState(() {
-          _vehicleTypeCtrl.text = found.vehicleType;
-          _vehicleLookupSuccess = '✅ Vehicle found: ${found.vehicleType}';
-        });
+        // ✅ RESTRICTION: block blacklisted vehicle in Pass Registry too
+        if (found.isBlacklistedVehicle) {
+          setState(() {
+            _vehicleLookupError =
+                '🚫 Vehicle ${found.vehicleNo} is BLACKLISTED. Pass cannot be issued.';
+            _vehicleTypeCtrl.text = '';
+          });
+        } else {
+          setState(() {
+            _vehicleTypeCtrl.text = found.vehicleType;
+            _vehicleLookupSuccess =
+                '✅ Vehicle found: ${found.vehicleType} (${found.vehicleNo})';
+          });
+        }
       } else {
         setState(
           () => _vehicleLookupError =
@@ -153,14 +156,11 @@ class _PassFormPageState extends State<PassFormPage> {
     }
   }
 
-  // ══════════════════════════════════════════════════════
-  // DATE PICKER
-  // ══════════════════════════════════════════════════════
+  // ── Date Picker ───────────────────────────────────────
   Future<void> _pickDate(TextEditingController ctrl) async {
-    final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.tryParse(ctrl.text) ?? now,
+      initialDate: DateTime.tryParse(ctrl.text) ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
       builder: (ctx, child) => Theme(
@@ -176,15 +176,38 @@ class _PassFormPageState extends State<PassFormPage> {
     }
   }
 
-  // ══════════════════════════════════════════════════════
-  // SAVE
-  // ══════════════════════════════════════════════════════
+  // ── Save ──────────────────────────────────────────────
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // ✅ RESTRICTION: block save if vehicle is blacklisted
     if (_vehicleLookupError != null) {
       setState(() => _error = 'Fix Vehicle ID error before saving.');
       return;
     }
+
+    // ✅ RESTRICTION: manual validation matching web submitIssuePass()
+    if (_issueDateCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Issue Date is required.');
+      return;
+    }
+    if (_validityDateCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Validity Date is required.');
+      return;
+    }
+    if (_gateNo.isEmpty) {
+      setState(() => _error = 'Gate No is required.');
+      return;
+    }
+    if (_empType == 'Company_Employee' && _employeeNoCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Employee No is required.');
+      return;
+    }
+    if (_empType == 'Contractor' && _contractorCodeCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Contractor Code is required.');
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
@@ -196,19 +219,25 @@ class _PassFormPageState extends State<PassFormPage> {
       issueDate: _issueDateCtrl.text.trim(),
       validityDate: _validityDateCtrl.text.trim(),
       employeeNo: _empType == 'Company_Employee'
-          ? _employeeNoCtrl.text.trim()
+          ? (_employeeNoCtrl.text.trim().isEmpty
+                ? null
+                : _employeeNoCtrl.text.trim())
           : null,
       employeeCompanyNo: _empType == 'Company_Employee'
-          ? _empCompanyNoCtrl.text.trim()
+          ? (_empCompanyNoCtrl.text.trim().isEmpty
+                ? null
+                : _empCompanyNoCtrl.text.trim())
           : null,
       contractorCode: _empType == 'Contractor'
-          ? _contractorCodeCtrl.text.trim()
+          ? (_contractorCodeCtrl.text.trim().isEmpty
+                ? null
+                : _contractorCodeCtrl.text.trim())
           : null,
       dept: _deptCtrl.text.trim().isEmpty ? null : _deptCtrl.text.trim(),
       gateNo: _gateNo,
       parkingToBeUsed: _parkingCtrl.text.trim().isEmpty
           ? null
-          : _parkingCtrl.text.trim(),
+          : _parkingCtrl.text.trim().toUpperCase(),
       vehicleId: int.tryParse(_vehicleIdCtrl.text.trim()),
       typeOfVehicle: _vehicleTypeCtrl.text.trim().isEmpty
           ? null
@@ -216,11 +245,12 @@ class _PassFormPageState extends State<PassFormPage> {
       mobileNo: _mobileCtrl.text.trim().isEmpty
           ? null
           : _mobileCtrl.text.trim(),
-      status: _status,
+      // ✅ Issue mode: hardcoded Active/Y — Edit mode: user-selected value
+      status: _isEdit ? _status : 'Active',
+      isActive: _isEdit ? _isActive : 'Y',
       remarks: _remarksCtrl.text.trim().isEmpty
           ? null
           : _remarksCtrl.text.trim(),
-      isActive: _isActive,
       empType: _empType,
       enterBy: 'ADMIN',
       enterDate: DateTime.now().toIso8601String().split('T')[0],
@@ -247,9 +277,7 @@ class _PassFormPageState extends State<PassFormPage> {
     }
   }
 
-  // ══════════════════════════════════════════════════════
-  // BUILD
-  // ══════════════════════════════════════════════════════
+  // ── BUILD ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -269,7 +297,7 @@ class _PassFormPageState extends State<PassFormPage> {
           key: _formKey,
           child: Column(
             children: [
-              // ── SECTION 1: Employee Type ─────────────────
+              // ── SECTION 1: Person Details ──────────────────
               _section(
                 title: 'PERSON DETAILS',
                 color: const Color(0xFFE65100),
@@ -342,28 +370,42 @@ class _PassFormPageState extends State<PassFormPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Employee / Contractor fields
                   if (_empType == 'Company_Employee') ...[
+                    // ✅ RESTRICTION: Employee No — required, UPPERCASE, no spaces
                     _field(
                       'EMPLOYEE NO *',
                       _employeeNoCtrl,
                       required: true,
                       hint: 'e.g. EMP001',
+                      formatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                        _UpperCaseFormatter(),
+                      ],
                     ),
                     const SizedBox(height: 12),
+                    // ✅ RESTRICTION: EC No — UPPERCASE, no spaces
                     _field(
                       'EC NO (COMPANY NO)',
                       _empCompanyNoCtrl,
-                      hint: 'e.g. HEG-001',
+                      hint: 'e.g. HEG001',
+                      formatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                        _UpperCaseFormatter(),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     _field('DEPARTMENT', _deptCtrl, hint: 'e.g. Mechanical'),
                   ] else ...[
+                    // ✅ RESTRICTION: Contractor Code — required, UPPERCASE, no spaces
                     _field(
                       'CONTRACTOR CODE *',
                       _contractorCodeCtrl,
                       required: true,
-                      hint: 'e.g. CONT-01',
+                      hint: 'e.g. CON001',
+                      formatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                        _UpperCaseFormatter(),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     _field(
@@ -373,22 +415,25 @@ class _PassFormPageState extends State<PassFormPage> {
                     ),
                   ],
                   const SizedBox(height: 12),
+                  // ✅ RESTRICTION: Mobile — digits only, max 10
                   _field(
                     'MOBILE NO',
                     _mobileCtrl,
                     keyboard: TextInputType.phone,
                     hint: 'e.g. 9876543210',
+                    maxLength: 10,
+                    formatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
                 ],
               ),
               const SizedBox(height: 14),
 
-              // ── SECTION 2: Vehicle Details ────────────────
+              // ── SECTION 2: Vehicle Details ─────────────────
               _section(
                 title: 'VEHICLE DETAILS',
                 color: const Color(0xFF1565C0),
                 children: [
-                  // Vehicle ID with lookup
+                  // Vehicle ID with lookup + blacklist check
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -417,7 +462,6 @@ class _PassFormPageState extends State<PassFormPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          // Lookup button
                           GestureDetector(
                             onTap: _lookingUp ? null : _lookupVehicle,
                             child: Container(
@@ -453,63 +497,79 @@ class _PassFormPageState extends State<PassFormPage> {
                         ),
                       ),
 
-                      // Lookup result
+                      // Lookup result banners
                       if (_vehicleLookupError != null) ...[
                         const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              size: 14,
-                              color: Colors.red,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                _vehicleLookupError!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.block,
+                                size: 15,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _vehicleLookupError!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                       if (_vehicleLookupSuccess != null) ...[
                         const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.check_circle_outline,
-                              size: 14,
-                              color: Color(0xFF2E7D32),
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                _vehicleLookupSuccess!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF2E7D32),
-                                  fontWeight: FontWeight.w600,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.check_circle_outline,
+                                size: 15,
+                                color: Color(0xFF2E7D32),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _vehicleLookupSuccess!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF2E7D32),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 16),
 
-                  // Type of Vehicle (read-only, auto-filled)
+                  // Type of Vehicle — READ-ONLY, auto-filled
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'TYPE OF VEHICLE *',
+                        'TYPE OF VEHICLE',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -545,16 +605,19 @@ class _PassFormPageState extends State<PassFormPage> {
               ),
               const SizedBox(height: 14),
 
-              // ── SECTION 3: Pass Details ───────────────────
+              // ── SECTION 3: Pass Details ────────────────────
               _section(
                 title: 'PASS DETAILS',
                 color: const Color(0xFF2E7D32),
                 children: [
+                  // ✅ RESTRICTION: Issue Date — required
                   _labelField(
                     'ISSUE DATE *',
                     _datePicker('Issue Date *', _issueDateCtrl, required: true),
                   ),
                   const SizedBox(height: 12),
+
+                  // ✅ RESTRICTION: Validity Date — required
                   _labelField(
                     'VALIDITY DATE *',
                     _datePicker(
@@ -565,7 +628,7 @@ class _PassFormPageState extends State<PassFormPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Gate No dropdown
+                  // ✅ RESTRICTION: Gate No — required dropdown
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -579,7 +642,9 @@ class _PassFormPageState extends State<PassFormPage> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        initialValue: _gates.contains(_gateNo) ? _gateNo : 'GATE_01',
+                        initialValue: _gates.contains(_gateNo)
+                            ? _gateNo
+                            : 'GATE_01',
                         onChanged: (v) => setState(() => _gateNo = v!),
                         decoration: _inputDeco(),
                         items: _gates
@@ -597,77 +662,133 @@ class _PassFormPageState extends State<PassFormPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
+
+                  // ✅ RESTRICTION: Parking — auto UPPERCASE
                   _field(
                     'PARKING TO BE USED',
                     _parkingCtrl,
-                    hint: 'e.g. LOT_A',
+                    hint: 'e.g. A-BLOCK, HEAVY YARD',
+                    formatters: [_UpperCaseFormatter()],
                   ),
                   const SizedBox(height: 12),
 
-                  // Status dropdown
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'STATUS',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF37474F),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: _statuses.contains(_status) ? _status : 'Active',
-                        onChanged: (v) => setState(() => _status = v!),
-                        decoration: _inputDeco(),
-                        items: _statuses
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s,
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Is Active dropdown
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'IS ACTIVE',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF37474F),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: _isActive,
-                        onChanged: (v) => setState(() => _isActive = v!),
-                        decoration: _inputDeco(),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'Y',
-                            child: Text('Yes', style: TextStyle(fontSize: 14)),
+                  // Status & isActive — only shown/editable in EDIT mode
+                  // In Issue mode: hardcoded Active/Y (matches web)
+                  if (_isEdit) ...[
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'STATUS',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF37474F),
                           ),
-                          DropdownMenuItem(
-                            value: 'N',
-                            child: Text('No', style: TextStyle(fontSize: 14)),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _statuses.contains(_status)
+                              ? _status
+                              : 'Active',
+                          onChanged: (v) => setState(() => _status = v!),
+                          decoration: _inputDeco(),
+                          items: _statuses
+                              .map(
+                                (s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(
+                                    s,
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'IS ACTIVE',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF37474F),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _isActive,
+                          onChanged: (v) => setState(() => _isActive = v!),
+                          decoration: _inputDeco(),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'Y',
+                              child: Text(
+                                'Yes',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'N',
+                              child: Text('No', style: TextStyle(fontSize: 14)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    // Show read-only badge in Issue mode so user knows it's hardcoded
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFA5D6A7)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                            color: Color(0xFF2E7D32),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Status will be set to ',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF2E7D32),
+                            ),
+                          ),
+                          const Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1B5E20),
+                            ),
+                          ),
+                          const Text(
+                            ' automatically.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF2E7D32),
+                            ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
                   _field(
                     'REMARKS',
                     _remarksCtrl,
@@ -678,11 +799,11 @@ class _PassFormPageState extends State<PassFormPage> {
               ),
               const SizedBox(height: 16),
 
-              // ── Error / Success banners ───────────────────
+              // ── Error / Success banners ────────────────────
               if (_error != null) _banner(msg: _error!, isError: true),
               if (_success != null) _banner(msg: _success!, isError: false),
 
-              // ── Save button ───────────────────────────────
+              // ── Save button ────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -734,9 +855,8 @@ class _PassFormPageState extends State<PassFormPage> {
     );
   }
 
-  // ══════════════════════════════════════════════════════
-  // HELPERS
-  // ══════════════════════════════════════════════════════
+  // ── HELPERS ───────────────────────────────────────────
+
   Widget _section({
     required String title,
     required Color color,
@@ -816,8 +936,10 @@ class _PassFormPageState extends State<PassFormPage> {
     TextEditingController ctrl, {
     bool required = false,
     int maxLines = 1,
+    int? maxLength,
     TextInputType keyboard = TextInputType.text,
     String? hint,
+    List<TextInputFormatter> formatters = const [],
   }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -833,9 +955,11 @@ class _PassFormPageState extends State<PassFormPage> {
       TextFormField(
         controller: ctrl,
         maxLines: maxLines,
+        maxLength: maxLength,
         keyboardType: keyboard,
+        inputFormatters: formatters,
         style: const TextStyle(fontSize: 14),
-        decoration: _inputDeco(hint: hint),
+        decoration: _inputDeco(hint: hint).copyWith(counterText: ''),
         validator: required
             ? (v) =>
                   (v == null || v.trim().isEmpty) ? '$label is required' : null
@@ -911,4 +1035,13 @@ class _PassFormPageState extends State<PassFormPage> {
       ],
     ),
   );
+}
+
+// ── UPPERCASE text formatter ────────────────────────────
+class _UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) => newValue.copyWith(text: newValue.text.toUpperCase());
 }
