@@ -27,11 +27,19 @@ class _PassesListPageState extends State<PassesListPage> {
   static const _statusOptions = [
     'All',
     'Active',
-    'Expired',
     'Expiring',
+    'Expired',
     'Surrendered',
   ];
   static const _empTypeOptions = ['All', 'Company_Employee', 'Contractor'];
+
+  // ── PASS-HEG formatter — mirrors passes.ts formatPassId() exactly ──
+  // passId 8  → "PASS-HEG-0008"
+  // passId 47 → "PASS-HEG-0047"
+  String _fmtPassId(int? id) {
+    if (id == null) return '—';
+    return 'PASS-HEG-${id.toString().padLeft(4, '0')}';
+  }
 
   @override
   void initState() {
@@ -63,7 +71,9 @@ class _PassesListPageState extends State<PassesListPage> {
           (p.contractorCode ?? '').toLowerCase().contains(q) ||
           (p.dept ?? '').toLowerCase().contains(q) ||
           (p.mobileNo ?? '').toLowerCase().contains(q) ||
-          '${p.passId}'.contains(q);
+          '${p.passId}'.contains(q) ||
+          // ✅ also matches "PASS-HEG-0008" typed by user
+          _fmtPassId(p.passId).toLowerCase().contains(q);
       final matchStatus = _filterStatus == 'All' || p.status == _filterStatus;
       final matchEmpType =
           _filterEmpType == 'All' || p.empType == _filterEmpType;
@@ -88,20 +98,20 @@ class _PassesListPageState extends State<PassesListPage> {
     if (edited == true) _load();
   }
 
-  // ── Status helpers ───────────────────────────────────────
+  // ── Status colour helpers (matches web badge CSS exactly) ────────
   Color _statusColor(String s) => switch (s.toLowerCase()) {
     'active' => const Color(0xFF1B5E20),
+    'expiring' => const Color(0xFFF57F17), // amber
     'expired' => const Color(0xFFB71C1C),
-    'surrendered' => const Color(0xFF4A148C),
-    'expiring' => const Color(0xFFF57F17),
+    'surrendered' => const Color(0xFF37474F), // blueGrey
     _ => Colors.grey.shade600,
   };
 
   Color _statusBg(String s) => switch (s.toLowerCase()) {
     'active' => const Color(0xFFE8F5E9),
+    'expiring' => const Color(0xFFFFF3E0), // ✅ FIXED (was 'suspended')
     'expired' => const Color(0xFFFFEBEE),
-    'suspended' => const Color(0xFFFFF3E0),
-    'pending' => const Color(0xFFE3F2FD),
+    'surrendered' => const Color(0xFFECEFF1), // ✅ FIXED (was 'pending')
     _ => Colors.grey.shade100,
   };
 
@@ -109,7 +119,7 @@ class _PassesListPageState extends State<PassesListPage> {
     if (d.isEmpty) return '—';
     final dt = DateTime.tryParse(d);
     if (dt == null) return d;
-    const m = [
+    const mo = [
       'Jan',
       'Feb',
       'Mar',
@@ -123,7 +133,7 @@ class _PassesListPageState extends State<PassesListPage> {
       'Nov',
       'Dec',
     ];
-    return '${dt.day.toString().padLeft(2, '0')} ${m[dt.month - 1]} ${dt.year}';
+    return '${dt.day.toString().padLeft(2, '0')} ${mo[dt.month - 1]} ${dt.year}';
   }
 
   @override
@@ -202,8 +212,10 @@ class _PassesListPageState extends State<PassesListPage> {
                       itemCount: _filtered.length,
                       itemBuilder: (ctx, i) {
                         final p = _filtered[i];
+                        final fmtId = _fmtPassId(p.passId); // compute once
                         return _PassCard(
                           pass: p,
+                          formattedPassId: fmtId, // ✅ NEW param
                           statusColor: _statusColor(p.status),
                           statusBg: _statusBg(p.status),
                           formatDate: _fmt,
@@ -212,6 +224,7 @@ class _PassesListPageState extends State<PassesListPage> {
                             MaterialPageRoute(
                               builder: (_) => PassDetailPage(
                                 pass: p,
+                                formattedPassId: fmtId, // ✅ NEW param
                                 onEdit: () => _openEditForm(p),
                               ),
                             ),
@@ -234,12 +247,12 @@ class _PassesListPageState extends State<PassesListPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Search bar
           TextField(
             style: const TextStyle(fontSize: 14, color: Colors.black87),
             decoration: InputDecoration(
-              hintText: 'Search emp code, contractor, dept, mobile...',
-              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              hintText:
+                  'Search by PASS-HEG-*, emp, contractor, dept, mobile...',
+              hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
               prefixIcon: Icon(
                 Icons.search,
                 size: 20,
@@ -300,6 +313,7 @@ class _PassesListPageState extends State<PassesListPage> {
 // ═══════════════════════════════════════════════════════════════
 class _PassCard extends StatelessWidget {
   final PassModel pass;
+  final String formattedPassId; // ✅ NEW — "PASS-HEG-0008"
   final Color statusColor;
   final Color statusBg;
   final String Function(String) formatDate;
@@ -308,6 +322,7 @@ class _PassCard extends StatelessWidget {
 
   const _PassCard({
     required this.pass,
+    required this.formattedPassId,
     required this.statusColor,
     required this.statusBg,
     required this.formatDate,
@@ -341,7 +356,7 @@ class _PassCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Tap area ───────────────────────────────────────
+          // ── Tap area ──────────────────────────────────────────
           InkWell(
             onTap: onTap,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -350,7 +365,7 @@ class _PassCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Left icon block ────────────────────────
+                  // Left icon block
                   Container(
                     width: 52,
                     height: 52,
@@ -366,26 +381,26 @@ class _PassCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
 
-                  // ── Main info ──────────────────────────────
+                  // Main info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Row 1: Pass ID + badges + arrow
+                        // Row 1: PASS-HEG-XXXX + emp type badge + status badge + arrow
                         Row(
                           children: [
-                            // Pass ID
+                            // ✅ CHANGED: raw number → PASS-HEG-XXXX (monospace, HEG blue)
                             Text(
-                              'Pass ${pass.passId ?? '—'}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade500,
-                                letterSpacing: 0.3,
+                              formattedPassId,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1A237E),
+                                letterSpacing: 0.6,
+                                fontFamily: 'monospace',
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Emp Type badge
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -408,7 +423,6 @@ class _PassCard extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
-                            // Status badge
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 9,
@@ -440,7 +454,7 @@ class _PassCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
 
-                        // Row 2: Name (big + bold)
+                        // Row 2: displayName
                         Text(
                           pass.displayName,
                           style: const TextStyle(
@@ -489,7 +503,7 @@ class _PassCard extends StatelessWidget {
             ),
           ),
 
-          // ── Divider ─────────────────────────────────────────
+          // ── Divider ──────────────────────────────────────────
           Divider(height: 1, color: Colors.grey.shade100),
 
           // ── Action buttons ───────────────────────────────────
@@ -556,34 +570,31 @@ class _PassCard extends StatelessWidget {
   }
 }
 
-// ── Small info row helper ────────────────────────────────────────
+// ── Small info row helper ─────────────────────────────────────────
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
   const _InfoRow({required this.icon, required this.text});
-
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: const Color(0xFF1A237E).withOpacity(0.45)),
-        const SizedBox(width: 5),
-        Flexible(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF37474F),
-            ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 14, color: const Color(0xFF1A237E).withOpacity(0.45)),
+      const SizedBox(width: 5),
+      Flexible(
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF37474F),
           ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 // ── Chip Row ──────────────────────────────────────────────────────
@@ -598,67 +609,64 @@ class _ChipRow extends StatelessWidget {
     required this.selected,
     required this.onSelect,
   });
-
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 50,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade600,
-            ),
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 50,
+        child: Text(
+          '$label:',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
           ),
         ),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: options.map((o) {
-                final sel = selected == o;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
-                    onTap: () => onSelect(o),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
+      ),
+      Expanded(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: options.map((o) {
+              final sel = selected == o;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () => onSelect(o),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: sel
+                          ? const Color(0xFF1A237E)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
                         color: sel
                             ? const Color(0xFF1A237E)
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: sel
-                              ? const Color(0xFF1A237E)
-                              : Colors.grey.shade300,
-                        ),
+                            : Colors.grey.shade300,
                       ),
-                      child: Text(
-                        o.replaceAll('_', ' '),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: sel ? Colors.white : Colors.grey.shade700,
-                        ),
+                    ),
+                    child: Text(
+                      o.replaceAll('_', ' '),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: sel ? Colors.white : Colors.grey.shade700,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              );
+            }).toList(),
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 // ── Error View ────────────────────────────────────────────────────
@@ -666,7 +674,6 @@ class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
   const _ErrorView({required this.message, required this.onRetry});
-
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(

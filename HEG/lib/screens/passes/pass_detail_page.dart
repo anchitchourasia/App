@@ -1,19 +1,25 @@
-// lib/screens/vpms/passes/pass_detail_page.dart
+// lib/screens/passes/pass_detail_page.dart
 
 import 'package:flutter/material.dart';
 import '../../../models/pass_model.dart';
 
 class PassDetailPage extends StatelessWidget {
   final PassModel pass;
+  final String formattedPassId; // ✅ NEW — "PASS-HEG-0008"
   final VoidCallback onEdit;
 
-  const PassDetailPage({super.key, required this.pass, required this.onEdit});
+  const PassDetailPage({
+    super.key,
+    required this.pass,
+    required this.formattedPassId,
+    required this.onEdit,
+  });
 
   String _fmt(String? d) {
     if (d == null || d.isEmpty) return '—';
     final dt = DateTime.tryParse(d);
     if (dt == null) return d;
-    const m = [
+    const mo = [
       'Jan',
       'Feb',
       'Mar',
@@ -27,34 +33,42 @@ class PassDetailPage extends StatelessWidget {
       'Nov',
       'Dec',
     ];
-    return '${dt.day.toString().padLeft(2, '0')} ${m[dt.month - 1]} ${dt.year}';
+    return '${dt.day.toString().padLeft(2, '0')} ${mo[dt.month - 1]} ${dt.year}';
   }
 
+  // ✅ FIXED: expiring + surrendered colours (was suspended/pending)
   Color _statusColor(String s) => switch (s.toLowerCase()) {
     'active' => const Color(0xFF2E7D32),
+    'expiring' => const Color(0xFFF57F17), // amber
     'expired' => const Color(0xFFC62828),
-    'suspended' => const Color(0xFFE65100),
-    'pending' => const Color(0xFF1565C0),
+    'surrendered' => const Color(0xFF37474F), // blueGrey
     _ => Colors.grey.shade600,
   };
 
   Color _statusBg(String s) => switch (s.toLowerCase()) {
     'active' => const Color(0xFFE8F5E9),
+    'expiring' => const Color(0xFFFFF3E0),
     'expired' => const Color(0xFFFFEBEE),
-    'suspended' => const Color(0xFFFFF3E0),
-    'pending' => const Color(0xFFE3F2FD),
+    'surrendered' => const Color(0xFFECEFF1),
     _ => Colors.grey.shade100,
   };
 
   @override
   Widget build(BuildContext context) {
     final isContractor = pass.empType == 'Contractor';
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F8),
       appBar: AppBar(
+        // ✅ CHANGED: AppBar shows PASS-HEG-XXXX (monospace)
         title: Text(
-          'Pass #${pass.passId ?? '—'}',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          formattedPassId,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+            fontFamily: 'monospace',
+          ),
         ),
         backgroundColor: const Color(0xFF1A237E),
         foregroundColor: Colors.white,
@@ -70,11 +84,12 @@ class PassDetailPage extends StatelessWidget {
           ),
         ],
       ),
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ── Status header ─────────────────────────
+            // ── Status header card ──────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -91,6 +106,18 @@ class PassDetailPage extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  // ✅ NEW: PASS-HEG-XXXX shown at top of header card
+                  Text(
+                    formattedPassId,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A237E),
+                      letterSpacing: 1.0,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -146,12 +173,14 @@ class PassDetailPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            // ── Details sections ──────────────────────
+
+            // ── Pass Info ───────────────────────────────────────
             _Section(
               title: 'Pass Info',
               icon: Icons.badge_outlined,
               rows: [
-                _Row('Pass ID', '${pass.passId ?? '—'}'),
+                // ✅ CHANGED: shows PASS-HEG-XXXX instead of raw number
+                _Row('Pass ID', formattedPassId),
                 _Row('Issue Date', _fmt(pass.issueDate)),
                 _Row('Valid Till', _fmt(pass.validityDate)),
                 _Row('Gate', pass.gateNo),
@@ -159,6 +188,8 @@ class PassDetailPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+
+            // ── Person Details ──────────────────────────────────
             _Section(
               title: isContractor ? 'Contractor Details' : 'Employee Details',
               icon: Icons.person_outline,
@@ -174,22 +205,27 @@ class PassDetailPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+
+            // ── Vehicle Info ────────────────────────────────────
             _Section(
               title: 'Vehicle Info',
               icon: Icons.directions_car_outlined,
               rows: [
-                _Row('Vehicle ID', '${pass.vehicleId ?? '—'}'),
-                _Row('Vehicle Type', pass.typeOfVehicle ?? '—'),
+                _Row('Vehicle ID (FK)', '${pass.vehicleId ?? '—'}'),
+                _Row('Type of Vehicle', pass.typeOfVehicle ?? '—'),
               ],
             ),
             const SizedBox(height: 10),
+
+            // ── System Info ─────────────────────────────────────
             _Section(
               title: 'System Info',
               icon: Icons.info_outline,
               rows: [
+                _Row('Status', pass.status),
+                _Row('Is Active', pass.isActive == 'Y' ? 'Yes' : 'No'),
                 _Row('Enter By', pass.enterBy ?? '—'),
                 _Row('Enter Date', _fmt(pass.enterDate)),
-                _Row('Is Active', pass.isActive == 'Y' ? 'Yes' : 'No'),
                 _Row(
                   'Remarks',
                   (pass.remarks?.isNotEmpty == true) ? pass.remarks! : '—',
@@ -204,6 +240,7 @@ class PassDetailPage extends StatelessWidget {
   }
 }
 
+// ── Section widget ────────────────────────────────────────────────
 class _Section extends StatelessWidget {
   final String title;
   final IconData icon;
@@ -255,7 +292,7 @@ class _Section extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: 130,
+                      width: 140,
                       child: Text(
                         r.label,
                         style: TextStyle(
