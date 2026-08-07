@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+
 import '../data/pass_registry_api.dart';
 import '../models/pass_registry_item.dart';
 import '../widgets/heg_app_bar.dart';
+import 'pass_entry/pass_entry_page.dart';
 
 class VehicleTrackingPage extends StatefulWidget {
   const VehicleTrackingPage({super.key});
@@ -12,210 +14,175 @@ class VehicleTrackingPage extends StatefulWidget {
 }
 
 class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
-  final PassRegistryApi _api = PassRegistryApi();
-  final TextEditingController _searchController = TextEditingController();
+  final PassRegistryApi api = PassRegistryApi();
+  final TextEditingController searchController = TextEditingController();
 
-  List<PassRegistryItem> _allPasses = [];
-  List<PassRegistryItem> _filteredPasses = [];
+  List<PassRegistryItem> allPasses = [];
+  List<PassRegistryItem> filteredPasses = [];
 
-  bool _loading = true;
-  bool _hasError = false;
-  String _errorMessage = '';
+  bool loading = true;
+  bool hasError = false;
+  String errorMessage = '';
 
-  Timer? _pollTimer;
-  DateTime? _lastUpdated;
+  Timer? pollTimer;
+  DateTime? lastUpdated;
 
-  String _searchText = '';
-  String _filterStatus = 'ALL';
-  String _filterEmpType = 'ALL';
-  String _filterVehicleType = 'ALL';
+  String searchText = '';
+  String filterStatus = 'ALL';
+  String filterEmpType = 'ALL';
+  String filterVehicleType = 'ALL';
 
-  int _currentPage = 1;
-  int _pageSize = 10;
+  int currentPage = 1;
+  int pageSize = 10;
 
-  static const Duration _pollInterval = Duration(seconds: 30);
+  static const Duration pollInterval = Duration(seconds: 30);
 
-  static const Color _bg1 = Color(0xFF0B1E3A);
-  static const Color _bg2 = Color(0xFF0EA5A4);
+  static const Color bg1 = Color(0xFF0B1E3A);
+  static const Color bg2 = Color(0xFF0EA5A4);
 
-  static const Color _pageBg = Color(0xFFF4F7FB);
-  static const Color _panelBg = Colors.white;
-  static const Color _panelBorder = Color(0xFFD9E2EC);
-  static const Color _textPrimary = Color(0xFF102A43);
-  static const Color _textSecondary = Color(0xFF627D98);
-  static const Color _accentDark = Color(0xFF0B1E3A);
-  static const Color _accentTeal = Color(0xFF0EA5A4);
+  static const Color panelBg = Colors.white;
+  static const Color panelBorder = Color(0xFFD9E2EC);
+  static const Color textPrimary = Color(0xFF102A43);
+  static const Color textSecondary = Color(0xFF627D98);
+  static const Color accentTeal = Color(0xFF0EA5A4);
+  static const Color accentDark = Color(0xFF0B1E3A);
 
   @override
   void initState() {
     super.initState();
-    _loadPasses();
-    _startPolling();
+    loadPasses();
+    startPolling();
   }
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
-    _searchController.dispose();
+    pollTimer?.cancel();
+    searchController.dispose();
     super.dispose();
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) {
+  void startPolling() {
+    pollTimer?.cancel();
+    pollTimer = Timer.periodic(pollInterval, (_) {
       if (!mounted) return;
-      _loadPasses(silent: true);
+      loadPasses(silent: true);
     });
   }
 
-  Future<void> _loadPasses({bool silent = false}) async {
+  Future<void> loadPasses({bool silent = false}) async {
     if (!silent) {
       setState(() {
-        _loading = true;
-        _hasError = false;
-        _errorMessage = '';
+        loading = true;
+        hasError = false;
+        errorMessage = '';
       });
     }
 
     try {
-      final rows = await _api.fetchPassRegistry();
+      final rows = await api.fetchPassRegistry();
       if (!mounted) return;
-
       setState(() {
-        _allPasses = rows;
-        _lastUpdated = DateTime.now();
-        _applyFilters();
+        allPasses = rows;
+        lastUpdated = DateTime.now();
+        applyFilters();
       });
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _hasError = true;
-          _errorMessage = e.toString();
+          hasError = true;
+          errorMessage = e.toString();
         });
       }
     } finally {
       if (!mounted) return;
       if (!silent) {
-        setState(() {
-          _loading = false;
-        });
+        setState(() => loading = false);
       }
     }
   }
 
-  void _applyFilters() {
-    _filteredPasses = _allPasses.where((row) {
-      return row.matchesSearch(_searchText) &&
-          row.matchesStatus(_filterStatus) &&
-          row.matchesEmpType(_filterEmpType) &&
-          row.matchesVehicleType(_filterVehicleType);
+  void applyFilters() {
+    filteredPasses = allPasses.where((row) {
+      return row.matchesSearch(searchText) &&
+          row.matchesStatus(filterStatus) &&
+          row.matchesEmpType(filterEmpType) &&
+          row.matchesVehicleType(filterVehicleType);
     }).toList();
 
-    final total = totalPages;
-    if (_currentPage > total) _currentPage = total;
-  }
-
-  List<String> get empTypeOptions {
-    final set = <String>{'ALL'};
-    for (final row in _allPasses) {
-      final value = row.empType.trim().toUpperCase();
-      if (value.isNotEmpty) set.add(value);
-    }
-    return set.toList();
-  }
-
-  List<String> get vehicleTypeOptions {
-    final set = <String>{'ALL'};
-    for (final row in _allPasses) {
-      final value = row.vehicleType.trim().toUpperCase();
-      if (value.isNotEmpty) set.add(value);
-    }
-    return set.toList();
-  }
-
-  List<String> get statusOptions => const [
-    'ALL',
-    'DRAFT',
-    'SAVED',
-    'SUBMITTED',
-    'CONFIRMED',
-    'ACTIVE',
-    'NEEDS_MODIFICATION',
-    'REJECT',
-  ];
-
-  int get totalPages {
-    final total = (_filteredPasses.length / _pageSize).ceil();
-    return total <= 0 ? 1 : total;
+    final totalPages = (filteredPasses.length / pageSize).ceil();
+    if (currentPage > totalPages) currentPage = totalPages;
   }
 
   List<PassRegistryItem> get pagedPasses {
-    final start = (_currentPage - 1) * _pageSize;
-    final end = start + _pageSize;
-    if (start >= _filteredPasses.length) return [];
-    return _filteredPasses.sublist(
+    final start = (currentPage - 1) * pageSize;
+    final end = start + pageSize;
+    if (start >= filteredPasses.length) return [];
+    return filteredPasses.sublist(
       start,
-      end > _filteredPasses.length ? _filteredPasses.length : end,
+      end > filteredPasses.length ? filteredPasses.length : end,
     );
   }
 
-  int get activeCount =>
-      _allPasses.where((e) => e.status.trim().toUpperCase() == 'ACTIVE').length;
+  int get totalPages {
+    final total = (filteredPasses.length / pageSize).ceil();
+    return total == 0 ? 1 : total;
+  }
 
-  int get draftCount => _allPasses.where((e) {
+  int get activeCount =>
+      allPasses.where((e) => e.status.trim().toUpperCase() == 'ACTIVE').length;
+
+  int get draftCount => allPasses.where((e) {
     final s = e.status.trim().toUpperCase();
     return s == 'DRAFT' || s == 'SAVED';
   }).length;
 
-  int get rejectCount => _allPasses.where((e) {
+  int get rejectCount => allPasses.where((e) {
     final s = e.status.trim().toUpperCase();
     return s == 'REJECT' || s == 'REJECTED' || s == 'REGRET';
   }).length;
 
-  void _onSearch(String value) {
+  void onSearch(String value) {
     setState(() {
-      _searchText = value;
-      _currentPage = 1;
-      _applyFilters();
+      searchText = value;
+      currentPage = 1;
+      applyFilters();
     });
   }
 
-  void _onStatusChange(String? value) {
+  void onStatusChange(String? value) {
     if (value == null) return;
     setState(() {
-      _filterStatus = value;
-      _currentPage = 1;
-      _applyFilters();
+      filterStatus = value;
+      currentPage = 1;
+      applyFilters();
     });
   }
 
-  void _onEmpTypeChange(String? value) {
+  void onEmpTypeChange(String? value) {
     if (value == null) return;
     setState(() {
-      _filterEmpType = value;
-      _currentPage = 1;
-      _applyFilters();
+      filterEmpType = value;
+      currentPage = 1;
+      applyFilters();
     });
   }
 
-  void _onVehicleTypeChange(String? value) {
+  void onVehicleTypeChange(String? value) {
     if (value == null) return;
     setState(() {
-      _filterVehicleType = value;
-      _currentPage = 1;
-      _applyFilters();
+      filterVehicleType = value;
+      currentPage = 1;
+      applyFilters();
     });
   }
 
-  void _changePage(int page) {
+  void changePage(int page) {
     if (page < 1 || page > totalPages) return;
-    setState(() {
-      _currentPage = page;
-    });
+    setState(() => currentPage = page);
   }
 
-  String _formatDate(String date) {
+  String formatDateString(String date) {
     if (date.trim().isEmpty) return '-';
     try {
       final dt = DateTime.parse(date);
@@ -228,10 +195,10 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     }
   }
 
-  Color _statusColor(String status) {
+  Color statusColor(String status) {
     switch (status.trim().toUpperCase()) {
-      case 'SAVED':
       case 'DRAFT':
+      case 'SAVED':
         return const Color(0xFF2563EB);
       case 'SUBMITTED':
         return const Color(0xFFD97706);
@@ -240,8 +207,8 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       case 'ACTIVE':
       case 'APPROVED':
         return const Color(0xFF15803D);
-      case 'NEEDS_MODIFICATION':
       case 'NEEDSMODIFICATION':
+      case 'NEEDS_MODIFICATION':
       case 'MODIFY':
         return const Color(0xFFB45309);
       case 'REJECT':
@@ -253,23 +220,33 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     }
   }
 
-  void _viewPass(PassRegistryItem row) {
+  void _openAddPassForm() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const PassEntryPage(),
+    );
+    loadPasses();
+  }
+
+  void viewPass(PassRegistryItem row) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PassDetailsSheet(
+      builder: (_) => PassDetailsSheet(
         row: row,
-        formatDate: _formatDate,
-        statusColor: _statusColor(row.status),
+        formatDate: formatDateString,
+        statusColor: statusColor(row.status),
       ),
     );
   }
 
-  void _printSticker(PassRegistryItem row) {
+  void printSticker(PassRegistryItem row) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('Print sticker for: ${row.passNo}')));
+    ).showSnackBar(SnackBar(content: Text('Print sticker for ${row.passNo}')));
   }
 
   @override
@@ -277,23 +254,29 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: const HegAppBar(title: 'Pass Registry'),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openAddPassForm,
+        backgroundColor: accentTeal,
+        child: const Icon(Icons.add),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [_bg1, _bg2],
+            colors: [bg1, bg2],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
-        child: _loading
+        child: loading
             ? const Center(
                 child: CircularProgressIndicator(color: Colors.white),
               )
-            : _hasError
-            ? _ErrorView(message: _errorMessage, onRetry: () => _loadPasses())
+            : hasError
+            ? ErrorView(message: errorMessage, onRetry: loadPasses)
             : RefreshIndicator(
-                color: _accentTeal,
-                onRefresh: () => _loadPasses(),
+                color: accentTeal,
+                onRefresh: loadPasses,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
                   children: [
@@ -302,7 +285,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                     _buildControlPanel(),
                     const SizedBox(height: 12),
                     if (pagedPasses.isEmpty)
-                      const _EmptyState()
+                      const EmptyState()
                     else
                       ...pagedPasses.map((row) => _buildPassCard(row)),
                     const SizedBox(height: 12),
@@ -315,9 +298,10 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   }
 
   Widget _buildSummaryPanel() {
-    final lastUpdatedText = _lastUpdated == null
+    final lastUpdatedText = lastUpdated == null
         ? '-'
-        : '${_lastUpdated!.hour.toString().padLeft(2, '0')}:${_lastUpdated!.minute.toString().padLeft(2, '0')}';
+        : '${lastUpdated!.hour.toString().padLeft(2, '0')}'
+              ':${lastUpdated!.minute.toString().padLeft(2, '0')}';
 
     return Container(
       decoration: BoxDecoration(
@@ -350,7 +334,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Row(
             children: [
               Expanded(
-                child: _summaryStat('Total', _allPasses.length.toString()),
+                child: _summaryStat('Total', allPasses.length.toString()),
               ),
               const SizedBox(width: 8),
               Expanded(child: _summaryStat('Active', activeCount.toString())),
@@ -373,7 +357,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Last updated: $lastUpdatedText',
+                'Last updated $lastUpdatedText',
                 style: TextStyle(
                   color: Colors.white.withAlpha(190),
                   fontSize: 12,
@@ -382,7 +366,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ),
               const Spacer(),
               Text(
-                'Page $_currentPage/$totalPages',
+                'Page $currentPage of $totalPages',
                 style: TextStyle(
                   color: Colors.white.withAlpha(190),
                   fontSize: 12,
@@ -431,9 +415,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   Widget _buildControlPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: _panelBg,
+        color: panelBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _panelBorder),
+        border: Border.all(color: panelBorder),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0C000000),
@@ -446,10 +430,10 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       child: Column(
         children: [
           TextField(
-            controller: _searchController,
-            onChanged: _onSearch,
+            controller: searchController,
+            onChanged: onSearch,
             style: const TextStyle(
-              color: _textPrimary,
+              color: textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -458,10 +442,10 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               prefixIcon: const Icon(
                 Icons.search,
                 size: 20,
-                color: _textSecondary,
+                color: textSecondary,
               ),
               hintText: 'Search pass no, vehicle no, employee, contractor',
-              hintStyle: const TextStyle(fontSize: 13, color: _textSecondary),
+              hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
               contentPadding: const EdgeInsets.symmetric(
@@ -470,11 +454,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _panelBorder),
+                borderSide: const BorderSide(color: panelBorder),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _accentTeal, width: 1.2),
+                borderSide: const BorderSide(color: accentTeal, width: 1.2),
               ),
             ),
           ),
@@ -482,31 +466,31 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Row(
             children: [
               Expanded(
-                child: _buildDropdown(
-                  'Status',
-                  _filterStatus,
-                  statusOptions,
-                  _onStatusChange,
-                ),
+                child: _buildDropdown('Status', filterStatus, [
+                  'ALL',
+                  'ACTIVE',
+                  'DRAFT',
+                  'SUBMITTED',
+                  'REJECT',
+                ], onStatusChange),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildDropdown(
-                  'Emp Type',
-                  _filterEmpType,
-                  empTypeOptions,
-                  _onEmpTypeChange,
-                ),
+                child: _buildDropdown('Emp Type', filterEmpType, [
+                  'ALL',
+                  'Company_Employee',
+                  'Contractor',
+                ], onEmpTypeChange),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _buildDropdown(
-            'Vehicle Type',
-            _filterVehicleType,
-            vehicleTypeOptions,
-            _onVehicleTypeChange,
-          ),
+          _buildDropdown('Vehicle Type', filterVehicleType, [
+            'ALL',
+            'LMV',
+            'HMV',
+            'Heavy Machinery',
+          ], onVehicleTypeChange),
         ],
       ),
     );
@@ -524,7 +508,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(
-          color: _textSecondary,
+          color: textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -536,26 +520,18 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _panelBorder),
+          borderSide: const BorderSide(color: panelBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _accentTeal, width: 1.2),
+          borderSide: const BorderSide(color: accentTeal, width: 1.2),
         ),
       ),
       items: items
           .map(
-            (e) => DropdownMenuItem<String>(
+            (e) => DropdownMenuItem(
               value: e,
-              child: Text(
-                e,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _textPrimary,
-                ),
-              ),
+              child: Text(e, overflow: TextOverflow.ellipsis),
             ),
           )
           .toList(),
@@ -564,14 +540,14 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   }
 
   Widget _buildPassCard(PassRegistryItem row) {
-    final badgeColor = _statusColor(row.status);
+    final badgeColor = statusColor(row.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: _panelBg,
+        color: panelBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _panelBorder),
+        border: Border.all(color: panelBorder),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0C000000),
@@ -606,7 +582,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
-                          color: _textPrimary,
+                          color: textPrimary,
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -656,7 +632,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ],
             ),
             const SizedBox(height: 12),
-            const Divider(height: 1, color: _panelBorder),
+            const Divider(height: 1, color: panelBorder),
             const SizedBox(height: 12),
             _dataLine('Employee', row.name),
             _dataLine('EC No', row.employeeNo),
@@ -668,11 +644,17 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             Row(
               children: [
                 Expanded(
-                  child: _dateBox('Issue Date', _formatDate(row.issueDate)),
+                  child: _dateBox(
+                    'Issue Date',
+                    formatDateString(row.issueDate),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _dateBox('Validity', _formatDate(row.validityDate)),
+                  child: _dateBox(
+                    'Validity',
+                    formatDateString(row.validityDate),
+                  ),
                 ),
               ],
             ),
@@ -684,16 +666,16 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                 _actionButton(
                   label: 'View',
                   icon: Icons.visibility_outlined,
-                  foreground: _accentDark,
+                  foreground: accentDark,
                   background: const Color(0xFFEAF2FF),
-                  onTap: () => _viewPass(row),
+                  onTap: () => viewPass(row),
                 ),
                 _actionButton(
                   label: 'Sticker',
                   icon: Icons.print_outlined,
                   foreground: const Color(0xFF334155),
                   background: const Color(0xFFF1F5F9),
-                  onTap: () => _printSticker(row),
+                  onTap: () => printSticker(row),
                 ),
               ],
             ),
@@ -708,7 +690,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       text: TextSpan(
         style: const TextStyle(
           fontSize: 12,
-          color: _textSecondary,
+          color: textSecondary,
           fontWeight: FontWeight.w600,
         ),
         children: [
@@ -716,7 +698,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           TextSpan(
             text: value,
             style: const TextStyle(
-              color: _textPrimary,
+              color: textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -736,7 +718,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             child: Text(
               label,
               style: const TextStyle(
-                color: _textSecondary,
+                color: textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -746,7 +728,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             child: Text(
               value.isEmpty ? '-' : value,
               style: const TextStyle(
-                color: _textPrimary,
+                color: textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -763,7 +745,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _panelBorder),
+        border: Border.all(color: panelBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -771,7 +753,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Text(
             label,
             style: const TextStyle(
-              color: _textSecondary,
+              color: textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -780,7 +762,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Text(
             value,
             style: const TextStyle(
-              color: _textPrimary,
+              color: textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),
@@ -829,9 +811,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   Widget _buildPaginationPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: _panelBg,
+        color: panelBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _panelBorder),
+        border: Border.all(color: panelBorder),
       ),
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -841,7 +823,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               const Text(
                 'Rows per page',
                 style: TextStyle(
-                  color: _textSecondary,
+                  color: textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -850,25 +832,25 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               Wrap(
                 spacing: 6,
                 children: [10, 20, 50].map((size) {
-                  final selected = _pageSize == size;
+                  final selected = pageSize == size;
                   return ChoiceChip(
                     label: Text(
-                      '$size',
+                      size.toString(),
                       style: TextStyle(
-                        color: selected ? Colors.white : _textPrimary,
+                        color: selected ? Colors.white : textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     selected: selected,
-                    selectedColor: _accentTeal,
+                    selectedColor: accentTeal,
                     backgroundColor: const Color(0xFFF1F5F9),
-                    side: const BorderSide(color: _panelBorder),
+                    side: const BorderSide(color: panelBorder),
                     onSelected: (_) {
                       setState(() {
-                        _pageSize = size;
-                        _currentPage = 1;
-                        _applyFilters();
+                        pageSize = size;
+                        currentPage = 1;
+                        applyFilters();
                       });
                     },
                   );
@@ -880,11 +862,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Row(
             children: [
               OutlinedButton(
-                onPressed: _currentPage > 1
-                    ? () => _changePage(_currentPage - 1)
+                onPressed: currentPage > 1
+                    ? () => changePage(currentPage - 1)
                     : null,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _panelBorder),
+                  side: const BorderSide(color: panelBorder),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -894,9 +876,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               Expanded(
                 child: Center(
                   child: Text(
-                    'Page $_currentPage of $totalPages',
+                    'Page $currentPage of $totalPages',
                     style: const TextStyle(
-                      color: _textPrimary,
+                      color: textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                     ),
@@ -904,11 +886,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                 ),
               ),
               ElevatedButton(
-                onPressed: _currentPage < totalPages
-                    ? () => _changePage(_currentPage + 1)
+                onPressed: currentPage < totalPages
+                    ? () => changePage(currentPage + 1)
                     : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _accentDark,
+                  backgroundColor: accentDark,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -925,12 +907,15 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   }
 }
 
-class _PassDetailsSheet extends StatelessWidget {
+// ================== PASS DETAILS SHEET ==================
+
+class PassDetailsSheet extends StatelessWidget {
   final PassRegistryItem row;
   final String Function(String) formatDate;
   final Color statusColor;
 
-  const _PassDetailsSheet({
+  const PassDetailsSheet({
+    super.key,
     required this.row,
     required this.formatDate,
     required this.statusColor,
@@ -947,12 +932,14 @@ class _PassDetailsSheet extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 10),
-          Container(
-            width: 42,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0xFFBCCCDC),
-              borderRadius: BorderRadius.circular(99),
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFBCCCDC),
+                borderRadius: BorderRadius.circular(99),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -981,60 +968,7 @@ class _PassDetailsSheet extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0B1E3A), Color(0xFF0EA5A4)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _detailChip('Pass No', row.passNo),
-                          _detailChip('Gate', row.gateNo),
-                          _detailChip('Type', row.vehicleType),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(20),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: Colors.white.withAlpha(28)),
-                        ),
-                        child: Text(
-                          row.status.isEmpty ? 'UNKNOWN' : row.status,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _passHeader(),
                 const SizedBox(height: 14),
                 _detailSection(
                   title: 'Employee Information',
@@ -1048,7 +982,7 @@ class _PassDetailsSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 _detailSection(
-                  title: 'Vehicle & Pass',
+                  title: 'Vehicle Pass',
                   children: [
                     _detailRow('Pass ID', row.passId.toString()),
                     _detailRow('Pass No', row.passNo),
@@ -1088,6 +1022,60 @@ class _PassDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _passHeader() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B1E3A), Color(0xFF0EA5A4)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _detailChip('Pass No', row.passNo),
+              _detailChip('Gate', row.gateNo),
+              _detailChip('Type', row.vehicleType),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(20),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withAlpha(28)),
+            ),
+            child: Text(
+              row.status.isEmpty ? 'UNKNOWN' : row.status,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -1177,11 +1165,13 @@ class _PassDetailsSheet extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
+// ================== ERROR VIEW ==================
+
+class ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({required this.message, required this.onRetry});
+  const ErrorView({super.key, required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1241,8 +1231,10 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+// ================== EMPTY STATE ==================
+
+class EmptyState extends StatelessWidget {
+  const EmptyState({super.key});
 
   @override
   Widget build(BuildContext context) {
