@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 
 import 'pass_entry_models.dart';
 import 'pass_entry_widgets.dart';
+import '/core/api_config.dart';
+import 'package:http_parser/http_parser.dart';
 
 class PassEntryForm extends StatefulWidget {
   final int? registryId;
@@ -24,14 +27,21 @@ class PassEntryForm extends StatefulWidget {
 }
 
 class _PassEntryFormState extends State<PassEntryForm> {
-  // ---------- Vehicle ----------
+  // ── Scroll controller for the form ──────────────────────────────
+  final _scrollCtrl = ScrollController();
+
+  // ── Vehicle ────────────────────────────────────────────────────
   final _vehicleNoCtrl = TextEditingController();
   String _vehicleType = '';
   final _brandModelCtrl = TextEditingController();
+  final _passNoCtrl = TextEditingController();
 
-  // ---------- Employee ----------
+  // ── Registry ID (local copy for update vs add) ──────────────────
+  int? _registryId; // ✅ add this
+
+  // ── Employee ───────────────────────────────────────────────────
   final _ecNoCtrl = TextEditingController();
-  String _empType = ''; // HEG, TACC, CONTRACT, CRE-PRM
+  String _empType = '';
 
   bool _fetchingEmployee = false;
   String? _empFetchError;
@@ -43,35 +53,37 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String _empContractorCode = '';
   String _empContractorName = '';
 
-  // ---------- Pass Details ----------
+  // ── Pass Details ────────────────────────────────────────────────
   String _gateNo = '';
   String _parkingToBeUsed = '';
 
-  // ---------- Workflow ----------
+  // ── Workflow ───────────────────────────────────────────────────
   String _status = 'DRAFT';
   int? _passNo;
   String? _remark;
-  String _enterBy = '';
+  String _enterBy = 'SYSTEM';
 
-  // ---------- Documents ----------
+  // ── Documents ───────────────────────────────────────────────────
   final List<PassDocumentModel> _documents = [
     PassDocumentModel(
+      documentId: null,
       documentType: '',
       documentNo: '',
       expiryDate: '',
       fileKey: 'document_0',
       fileName: '',
+      filePath: null,
     ),
   ];
 
-  // ---------- UI State ----------
+  // ── UI State ───────────────────────────────────────────────────
   bool _isSaving = false;
   String? _saveSuccess;
   String? _saveError;
 
   bool get _isReadOnly => widget.isViewMode;
 
-  // ---------- Constants (same as web) ----------
+  // ── Constants ──────────────────────────────────────────────────
   static const _vehicleTypes = [
     'BIKE',
     'SCOOTER',
@@ -82,29 +94,32 @@ class _PassEntryFormState extends State<PassEntryForm> {
     'CRANE',
     'TRACTOR',
   ];
-
   static const _empTypes = ['HEG', 'TACC', 'CONTRACT', 'CRE-PRM'];
-
   static const _gates = ['GATE_01', 'GATE_02', 'GATE_03', 'GATE_04', 'GATE_05'];
-
   static const _parkings = ['P1', 'P2', 'P3', 'P4', 'P5'];
-
   static const _allowedDocTypes = ['RC', 'INSURANCE', 'LICENSE'];
 
-  // ---------- API config (match web) ----------
-  // Replace with your real base URL / key
-  static const _baseUrl = 'http://localhost:3031/vpms';
-  static const _apiKey = 'VPMS_SECRET_KEY_2026';
+  // ── API config ──────────────────────────────────────────────────
+  String get _employeeReportUrl => ApiConfig.employeeReport;
+  String get _passSaveUrl => ApiConfig.passSave;
+  String get _passUpdateUrl => ApiConfig.passUpdate;
+  String get _passListUrl => ApiConfig.passList;
+  String get _apiKey => ApiConfig.apiKey;
 
-  String get _employeeReportUrl => '$_baseUrl/api/reports/employee-department';
-  String get _passSaveUrl => '$_baseUrl/api/passes/save';
-  String get _passUpdateUrl => '$_baseUrl/api/passes/update';
-  String get _passListUrl => '$_baseUrl/api/passes/list';
-  // ---------- Lifecycle ----------
+  // ── Lifecycle ───────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
     _loadLoggedInUser();
+    _registryId = widget.registryId;
+
+    // Auto-sync Pass No from Vehicle Details to Workflow Status
+    _passNoCtrl.addListener(() {
+      setState(() {
+        // Pass No is already in _passNoCtrl.text, no need to copy
+      });
+    });
+
     if (widget.registryId != null) {
       _loadPass(widget.registryId!);
     }
@@ -115,15 +130,17 @@ class _PassEntryFormState extends State<PassEntryForm> {
     _vehicleNoCtrl.dispose();
     _brandModelCtrl.dispose();
     _ecNoCtrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
   void _loadLoggedInUser() {
-    // TODO: read from your session store / secure storage
     _enterBy = 'SYSTEM';
   }
 
-  // ---------- Employee lookup ----------
+  // ════════════════════════════════════════════════════════════════
+  // EMPLOYEE LOOKUP
+  // ════════════════════════════════════════════════════════════════
   Future<void> _loadEmployee() async {
     setState(() {
       _empFetchError = null;
@@ -195,7 +212,9 @@ class _PassEntryFormState extends State<PassEntryForm> {
     });
   }
 
-  // ---------- Pass load ----------
+  // ════════════════════════════════════════════════════════════════
+  // PASS LOAD
+  // ════════════════════════════════════════════════════════════════
   Future<void> _loadPass(int id) async {
     setState(() {
       _isSaving = true;
@@ -204,10 +223,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
     try {
       final res = await http
-          .get(
-            Uri.parse('$_baseUrl/api/passes/list/$id'),
-            headers: {'x-api-key': _apiKey},
-          )
+          .get(Uri.parse('$_passListUrl/$id'), headers: {'x-api-key': _apiKey})
           .timeout(const Duration(milliseconds: 12000));
 
       if (res.statusCode == 200) {
@@ -238,6 +254,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
                       expiryDate: (d['expiryDate'] ?? '').toString(),
                       fileKey: (d['fileKey'] ?? '').toString(),
                       fileName: (d['fileName'] ?? '').toString(),
+                      filePath: null,
                     ),
                   )
                   .toList(),
@@ -265,7 +282,9 @@ class _PassEntryFormState extends State<PassEntryForm> {
     }
   }
 
-  // ---------- Validation ----------
+  // ════════════════════════════════════════════════════════════════
+  // VALIDATION
+  // ════════════════════════════════════════════════════════════════
   bool _validateVehicle() {
     if (_vehicleNoCtrl.text.trim().isEmpty) {
       _saveError = 'Vehicle Number is required.';
@@ -347,11 +366,15 @@ class _PassEntryFormState extends State<PassEntryForm> {
     return true;
   }
 
-  // ---------- Build request ----------
+  // ════════════════════════════════════════════════════════════════
+  // BUILD REQUEST
+  // ════════════════════════════════════════════════════════════════
   PassRequestModel _buildRequest({String? statusOverride}) {
     return PassRequestModel(
-      id: widget.registryId,
-      passNo: _passNo,
+      id: _registryId,
+      passNo: _passNoCtrl.text.trim().isNotEmpty
+          ? int.tryParse(_passNoCtrl.text.trim())
+          : null,
       vehicleNo: _vehicleNoCtrl.text.trim(),
       vehicleType: _vehicleType.trim(),
       brandModel: _brandModelCtrl.text.trim(),
@@ -369,11 +392,16 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
-  // ---------- Save / Submit ----------
+  // ════════════════════════════════════════════════════════════════
+  // SAVE / SUBMIT
+  // ════════════════════════════════════════════════════════════════
   Future<void> _savePass({bool submit = false}) async {
-    if (!_validateForm()) return;
+    if (!_validateForm()) {
+      setState(() {});
+      return;
+    }
 
-    String? statusToUse = _status;
+    String statusToUse = _status;
     if (submit) {
       statusToUse = 'SUBMITTED';
       if (_status.toUpperCase() == 'MODIFY' ||
@@ -392,61 +420,134 @@ class _PassEntryFormState extends State<PassEntryForm> {
     final request = _buildRequest(statusOverride: statusToUse);
     final jsonPart = jsonEncode(request.toJson());
 
-    final formData = http.MultipartRequest('POST', Uri.parse(_passSaveUrl));
-    formData.headers['x-api-key'] = _apiKey;
+    Future<http.Response> _sendMultipart() async {
+      if (_registryId != null) {
+        // EDIT MODE → PUT /update/{id}
+        print('FLUTTER: UPDATE MODE, ID = $_registryId');
+        final formData = http.MultipartRequest(
+          'PUT',
+          Uri.parse('$_passUpdateUrl/$_registryId'),
+        );
+        formData.headers['x-api-key'] = _apiKey;
 
-    formData.files.add(
-      http.MultipartFile.fromString(
-        'request',
-        jsonPart,
-        filename: 'request.json',
-      ),
-    );
+        formData.files.add(
+          http.MultipartFile.fromString(
+            'request',
+            jsonPart,
+            filename: 'request.json',
+            contentType: MediaType('application', 'json'),
+          ),
+        );
 
-    for (var i = 0; i < _documents.length; i++) {
-      final doc = _documents[i];
-      if (doc.filePath != null && doc.filePath!.isNotEmpty) {
-        final file = File(doc.filePath!);
-        if (await file.exists()) {
-          formData.files.add(
-            await http.MultipartFile.fromPath(
-              doc.fileKey.isNotEmpty ? doc.fileKey : 'document_$i',
-              file.path,
-            ),
-          );
+        for (var i = 0; i < _documents.length; i++) {
+          final doc = _documents[i];
+          if (doc.filePath != null && doc.filePath!.isNotEmpty) {
+            final file = File(doc.filePath!);
+            if (await file.exists()) {
+              formData.files.add(
+                await http.MultipartFile.fromPath(
+                  doc.fileKey.isNotEmpty ? doc.fileKey : 'document_$i',
+                  file.path,
+                ),
+              );
+            }
+          }
+        }
+
+        final streamed = await formData.send();
+        return http.Response.fromStream(streamed);
+      }
+
+      // ADD MODE → POST /save
+      print('FLUTTER: ADD MODE (POST /save)');
+      final formData = http.MultipartRequest('POST', Uri.parse(_passSaveUrl));
+      formData.headers['x-api-key'] = _apiKey;
+
+      formData.files.add(
+        http.MultipartFile.fromString(
+          'request',
+          jsonPart,
+          filename: 'request.json',
+          contentType: MediaType('application', 'json'),
+        ),
+      );
+
+      for (var i = 0; i < _documents.length; i++) {
+        final doc = _documents[i];
+        if (doc.filePath != null && doc.filePath!.isNotEmpty) {
+          final file = File(doc.filePath!);
+          if (await file.exists()) {
+            formData.files.add(
+              await http.MultipartFile.fromPath(
+                doc.fileKey.isNotEmpty ? doc.fileKey : 'document_$i',
+                file.path,
+              ),
+            );
+          }
         }
       }
+
+      final streamed = await formData.send();
+      return http.Response.fromStream(streamed);
     }
 
     try {
-      final streamedResponse = await formData.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final response = await _sendMultipart();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         setState(() {
+          _registryId ??= data['id'] as int?; // capture id after first save
           _passNo = data['passNo'] as int?;
-          _status = (data['reqStatus'] ?? 'DRAFT').toString();
+          _status = (data['reqStatus'] ?? (submit ? 'SUBMITTED' : 'DRAFT'))
+              .toString();
           _saveSuccess = submit
               ? 'Pass submitted successfully.'
-              : 'Vehicle pass saved successfully.';
+              : (_registryId != null
+                    ? 'Vehicle pass updated successfully.'
+                    : 'Vehicle pass saved successfully.');
           _isSaving = false;
         });
+        _scrollToBottom();
+      } else if (response.statusCode == 409) {
+        setState(() {
+          _saveError =
+              'Duplicate pass not allowed (Pass No + Employee Type must be unique).';
+          _isSaving = false;
+        });
+        _scrollToBottom();
       } else {
         setState(() {
-          _saveError = 'Unable to save vehicle pass.';
+          _saveError =
+              'Unable to save vehicle pass. HTTP ${response.statusCode}';
           _isSaving = false;
         });
+        _scrollToBottom();
       }
     } catch (e) {
       setState(() {
         _saveError = 'Unable to save vehicle pass.';
         _isSaving = false;
       });
+      _scrollToBottom();
     }
   }
 
-  // ---------- Document helpers ----------
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // DOCUMENT HELPERS
+  // ════════════════════════════════════════════════════════════════
   List<String> _availableDocTypes(int index) {
     final selectedTypes = _documents
         .asMap()
@@ -482,11 +583,13 @@ class _PassEntryFormState extends State<PassEntryForm> {
     setState(() {
       _documents.add(
         PassDocumentModel(
+          documentId: null,
           documentType: '',
           documentNo: '',
           expiryDate: '',
           fileKey: 'document_${_documents.length}',
           fileName: '',
+          filePath: null,
         ),
       );
     });
@@ -519,6 +622,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
     setState(() {
       _documents[index] = PassDocumentModel(
+        documentId: _documents[index].documentId,
         documentType: _documents[index].documentType,
         documentNo: _documents[index].documentNo,
         expiryDate: _documents[index].expiryDate,
@@ -529,223 +633,313 @@ class _PassEntryFormState extends State<PassEntryForm> {
     });
   }
 
-  // ---------- UI ----------
+  // ════════════════════════════════════════════════════════════════
+  // CLEAR FORM
+  // ════════════════════════════════════════════════════════════════
+  void _clearForm() {
+    setState(() {
+      _vehicleNoCtrl.clear();
+      _vehicleType = '';
+      _brandModelCtrl.clear();
+      _ecNoCtrl.clear();
+      _empType = '';
+      _clearEmployeeData();
+      _empFetchError = null;
+      _gateNo = '';
+      _parkingToBeUsed = '';
+      _status = 'DRAFT';
+      _passNo = null;
+      _remark = null;
+      _documents.clear();
+      _documents.add(
+        PassDocumentModel(
+          documentId: null,
+          documentType: '',
+          documentNo: '',
+          expiryDate: '',
+          fileKey: 'document_0',
+          fileName: '',
+          filePath: null,
+        ),
+      );
+      _saveSuccess = null;
+      _saveError = null;
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // UI BUILD
+  // ════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      controller: _scrollCtrl,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
         _buildVehicleSection(),
-        const SizedBox(height: 12),
         _buildEmployeeSection(),
-        const SizedBox(height: 12),
         _buildPassDetailsSection(),
-        const SizedBox(height: 12),
         _buildStatusSection(),
-        const SizedBox(height: 12),
         _buildDocumentsSection(),
-        const SizedBox(height: 12),
         _buildActionButtons(),
         if (_saveSuccess != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _buildAlert(success: true, message: _saveSuccess!),
         ],
         if (_saveError != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _buildAlert(success: false, message: _saveError!),
         ],
       ],
     );
   }
 
+  // ── VEHICLE ─────────────────────────────────────────────────────
   Widget _buildVehicleSection() {
     return PassSection(
       icon: Icons.directions_car,
       title: 'Vehicle Details',
       children: [
-        PassGrid2(
-          children: [
-            PassField(
-              label: 'Vehicle Number',
-              hintText: 'MP09AB1234',
-              controller: _vehicleNoCtrl,
-              readOnly: _isReadOnly,
-              onSubmitted: (_) {},
-              textTransform: TextTransform.uppercase,
-            ),
-            PassDropdown(
-              label: 'Vehicle Type',
-              value: _vehicleType.isEmpty ? null : _vehicleType,
-              items: _vehicleTypes,
-              hint: '-- Select Vehicle Type --',
-              onChanged: (v) => setState(() => _vehicleType = v ?? ''),
-            ),
-          ],
+        PassField(
+          label: 'Vehicle Number',
+          hintText: 'MP09AB1234',
+          controller: _vehicleNoCtrl,
+          readOnly: _isReadOnly,
+          onSubmitted: (_) {},
+          textTransform: TextTransform.uppercase,
+          width: double.infinity,
         ),
-        const SizedBox(height: 12),
-        PassGrid2(
-          children: [
-            PassField(
-              label: 'Brand / Model',
-              hintText: 'Honda City / Tata Truck',
-              controller: _brandModelCtrl,
-              readOnly: _isReadOnly,
-              onSubmitted: (_) {},
-              textTransform: TextTransform.uppercase,
-            ),
-            PassField(
-              label: 'Pass No',
-              hintText: 'Enter Pass No',
-              initialValue: _passNo?.toString() ?? '',
-              readOnly: true,
-              onSubmitted: (_) {},
-            ),
-          ],
+        const SizedBox(height: 10),
+        PassDropdown(
+          label: 'Vehicle Type',
+          value: _vehicleType.isEmpty ? null : _vehicleType,
+          items: _vehicleTypes,
+          hint: '-- Select Vehicle Type --',
+          onChanged: _isReadOnly
+              ? null
+              : (v) => setState(() => _vehicleType = v ?? ''),
+          width: double.infinity,
+        ),
+        const SizedBox(height: 10),
+        PassField(
+          label: 'Brand / Model',
+          hintText: 'Honda City / Tata Truck',
+          controller: _brandModelCtrl,
+          readOnly: _isReadOnly,
+          onSubmitted: (_) {},
+          textTransform: TextTransform.uppercase,
+          width: double.infinity,
+        ),
+        const SizedBox(height: 10),
+        PassField(
+          label: 'Pass No',
+          hintText: 'Enter Pass No',
+          controller: _passNoCtrl,
+          readOnly: _isReadOnly,
+          onSubmitted: (_) {},
+          textTransform: TextTransform.none,
+          width: double.infinity,
         ),
       ],
     );
   }
 
+  // ── EMPLOYEE ────────────────────────────────────────────────────
   Widget _buildEmployeeSection() {
     return PassSection(
       icon: Icons.badge,
       title: 'Employee / Contractor Details',
       children: [
-        PassGrid3(
+        PassDropdown(
+          label: 'Employee Type',
+          value: _empType.isEmpty ? null : _empType,
+          items: _empTypes,
+          hint: '-- Select Employee Type --',
+          onChanged: _isReadOnly
+              ? null
+              : (v) {
+                  setState(() {
+                    _empType = v ?? '';
+                    _clearEmployeeData();
+                    _ecNoCtrl.clear();
+                    _empFetchError = null;
+                  });
+                },
+          width: double.infinity,
+        ),
+        const SizedBox(height: 10),
+        Row(
           children: [
-            PassDropdown(
-              label: 'Employee Type',
-              value: _empType.isEmpty ? null : _empType,
-              items: _empTypes,
-              hint: '-- Select Employee Type --',
-              onChanged: (v) {
-                setState(() {
-                  _empType = v ?? '';
-                  _clearEmployeeData();
-                  _ecNoCtrl.clear();
-                  _empFetchError = null;
-                });
-              },
+            Expanded(
+              flex: 4,
+              child: PassField(
+                label: 'EC No',
+                hintText: 'Enter Employee Code',
+                controller: _ecNoCtrl,
+                readOnly: _isReadOnly,
+                onSubmitted: (_) => _loadEmployee(),
+                hintTextExtra: _empType.isEmpty
+                    ? 'Select Employee Type First'
+                    : 'Press Search or Enter',
+                width: double.infinity,
+              ),
             ),
-            PassField(
-              label: 'EC No',
-              hintText: 'Enter Employee Code',
-              controller: _ecNoCtrl,
-              readOnly: _isReadOnly,
-              onSubmitted: (_) => _loadEmployee(),
-              suffix: _fetchingEmployee
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
-              hintTextExtra: _empType.isEmpty
-                  ? 'Select Employee Type First'
-                  : 'Employee details fetched automatically',
-            ),
-            PassField(
-              label: 'Employee Name',
-              initialValue: _empName,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 42,
+                    child: ElevatedButton(
+                      onPressed: _isReadOnly || _empType.isEmpty
+                          ? null
+                          : _loadEmployee,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: _fetchingEmployee
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(Icons.search, size: 20),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        PassGrid3(
-          children: [
-            PassField(
-              label: 'Department',
-              initialValue: _empDept,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
-            ),
-            PassField(
-              label: 'Department Code',
-              initialValue: _empDeptCode,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
-            ),
-            PassField(
-              label: 'Aadhar Number',
-              initialValue: _empAadhar,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        PassGrid2(
-          children: [
-            PassField(
-              label: 'Contractor Code',
-              initialValue: _empContractorCode,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
-            ),
-            PassField(
-              label: 'Contractor Name',
-              initialValue: _empContractorName,
-              readOnly: true,
-              placeholder: 'Auto Filled',
-              onSubmitted: (_) {},
-            ),
-          ],
-        ),
+        const SizedBox(height: 10),
+        _buildEmployeeSummaryCard(),
         if (_empFetchError != null) ...[
           const SizedBox(height: 8),
-          _buildFetchError(_empFetchError!),
+          _buildMessageBanner(message: _empFetchError!, isError: true),
         ],
         if (_empName.isNotEmpty &&
             !_fetchingEmployee &&
             _empFetchError == null) ...[
           const SizedBox(height: 8),
-          _buildFetchSuccess(),
+          _buildMessageBanner(
+            message: 'Employee Found: $_empName  $_empDept',
+            isError: false,
+          ),
         ],
       ],
     );
   }
 
-  Widget _buildPassDetailsSection() {
-    return PassSection(
-      icon: Icons.card_membership,
-      title: 'Pass Details',
+  Widget _buildEmployeeSummaryCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _summaryRow('Employee', _empName.isEmpty ? '—' : _empName),
+          const SizedBox(height: 8),
+          _summaryRow('Department', _empDept.isEmpty ? '—' : _empDept),
+          const SizedBox(height: 8),
+          _summaryRow(
+            'Contractor',
+            _empContractorName.isEmpty ? '—' : _empContractorName,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PassGrid2(
-          children: [
-            PassDropdown(
-              label: 'Gate No',
-              value: _gateNo.isEmpty ? null : _gateNo,
-              items: _gates,
-              hint: '-- Select Gate --',
-              onChanged: (v) => setState(() => _gateNo = v ?? ''),
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF627D98),
             ),
-            PassDropdown(
-              label: 'Parking To Be Used',
-              value: _parkingToBeUsed.isEmpty ? null : _parkingToBeUsed,
-              items: _parkings,
-              hint: '-- Select Parking Area --',
-              onChanged: (v) => setState(() => _parkingToBeUsed = v ?? ''),
+          ),
+        ),
+        const Text(
+          ': ',
+          style: TextStyle(fontSize: 11, color: Color(0xFF627D98)),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF102A43),
             ),
-          ],
+          ),
         ),
       ],
     );
   }
 
+  // ── PASS DETAILS ────────────────────────────────────────────────
+  Widget _buildPassDetailsSection() {
+    return PassSection(
+      icon: Icons.card_membership,
+      title: 'Pass Details',
+      children: [
+        PassDropdown(
+          label: 'Gate No',
+          value: _gateNo.isEmpty ? null : _gateNo,
+          items: _gates,
+          hint: '-- Select Gate --',
+          onChanged: _isReadOnly
+              ? null
+              : (v) => setState(() => _gateNo = v ?? ''),
+          width: double.infinity,
+        ),
+        const SizedBox(height: 10),
+        PassDropdown(
+          label: 'Parking Area',
+          value: _parkingToBeUsed.isEmpty ? null : _parkingToBeUsed,
+          items: _parkings,
+          hint: '-- Select Parking Area --',
+          onChanged: _isReadOnly
+              ? null
+              : (v) => setState(() => _parkingToBeUsed = v ?? ''),
+          width: double.infinity,
+        ),
+      ],
+    );
+  }
+
+  // ── STATUS ─────────────────────────────────────────────────────
   Widget _buildStatusSection() {
     return PassSection(
       icon: Icons.schema,
       title: 'Workflow Status',
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: const Color(0xFFEFF6FF),
             borderRadius: BorderRadius.circular(10),
@@ -757,7 +951,13 @@ class _PassEntryFormState extends State<PassEntryForm> {
               const SizedBox(height: 6),
               _statusRow('Entered By', _enterBy.isEmpty ? '-' : _enterBy),
               const SizedBox(height: 6),
-              _statusRow('Pass No', _passNo?.toString() ?? '-'),
+              _statusRow(
+                'Pass No',
+                _passNoCtrl.text.trim().isEmpty
+                    ? '-'
+                    : _passNoCtrl.text
+                          .trim(), // ✅ Auto-renders from Vehicle Details
+              ),
             ],
           ),
         ),
@@ -780,6 +980,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
         Expanded(
           child: Text(
             value,
+            textAlign: TextAlign.right,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -791,6 +992,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
+  // ── DOCUMENTS ───────────────────────────────────────────────────
   Widget _buildDocumentsSection() {
     return PassSection(
       icon: Icons.file_present,
@@ -799,9 +1001,9 @@ class _PassEntryFormState extends State<PassEntryForm> {
       children: [
         _buildDocTableHeader(),
         ...List.generate(_documents.length, (i) => _buildDocRow(i)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         _buildAddDocButton(),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         _buildDocInfo(),
       ],
     );
@@ -809,7 +1011,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
   Widget _buildDocTableHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF0F2040), Color(0xFF1A3560)],
@@ -824,7 +1026,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
           Expanded(
             flex: 3,
             child: Text(
-              'Document Type',
+              'Doc Type',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -835,7 +1037,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
           Expanded(
             flex: 3,
             child: Text(
-              'Document No',
+              'Doc No',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -846,7 +1048,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
           Expanded(
             flex: 2,
             child: Text(
-              'Expiry Date',
+              'Expiry',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -865,7 +1067,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
               ),
             ),
           ),
-          SizedBox(width: 32),
+          SizedBox(width: 28),
         ],
       ),
     );
@@ -874,76 +1076,83 @@ class _PassEntryFormState extends State<PassEntryForm> {
   Widget _buildDocRow(int index) {
     final doc = _documents[index];
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.only(top: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
       decoration: BoxDecoration(
         color: index % 2 == 0 ? const Color(0xFFF8FAFD) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFC8D6E8)),
+        borderRadius: index == _documents.length - 1
+            ? const BorderRadius.only(
+                bottomLeft: Radius.circular(10),
+                bottomRight: Radius.circular(10),
+              )
+            : BorderRadius.zero,
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: PassDropdownSmall(
-                  value: doc.documentType.isEmpty ? null : doc.documentType,
-                  items: _availableDocTypes(index),
-                  hint: '-- Select Type --',
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() {
-                      _documents[index] = PassDocumentModel(
-                        documentId: doc.documentId,
-                        documentType: v,
-                        documentNo: '',
-                        expiryDate: '',
-                        fileKey: doc.fileKey,
-                        fileName: doc.fileName,
-                        filePath: doc.filePath,
-                      );
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                flex: 3,
-                child: PassFieldSmall(
-                  hintText: 'Document Number',
-                  initialValue: doc.documentNo,
-                  readOnly: _isReadOnly,
-                  onChanged: (v) => setState(() {
-                    _documents[index].documentNo = v;
-                  }),
-                  textTransform: TextTransform.uppercase,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                flex: 2,
-                child: PassDateFieldSmall(
-                  value: doc.expiryDate.isEmpty ? null : doc.expiryDate,
-                  onDateSelected: (d) => setState(() {
-                    _documents[index].expiryDate = d;
-                  }),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(flex: 3, child: _buildDocFileCell(index)),
-              const SizedBox(width: 4),
-              SizedBox(
-                width: 32,
-                child: IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  color: const Color(0xFFF87171),
-                  onPressed: () => _removeDocument(index),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ),
-            ],
+          Expanded(
+            flex: 3,
+            child: PassDropdownSmall(
+              value: doc.documentType.isEmpty ? null : doc.documentType,
+              items: _availableDocTypes(index),
+              hint: '-- Select --',
+              onChanged: _isReadOnly
+                  ? null
+                  : (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _documents[index] = PassDocumentModel(
+                          documentId: doc.documentId,
+                          documentType: v,
+                          documentNo: '',
+                          expiryDate: '',
+                          fileKey: doc.fileKey,
+                          fileName: doc.fileName,
+                          filePath: doc.filePath,
+                        );
+                      });
+                    },
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 3,
+            child: PassFieldSmall(
+              hintText: 'Doc No',
+              initialValue: doc.documentNo,
+              readOnly: _isReadOnly,
+              onChanged: (v) => setState(() {
+                _documents[index].documentNo = v;
+              }),
+              textTransform: TextTransform.uppercase,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 2,
+            child: PassDateFieldSmall(
+              value: doc.expiryDate.isEmpty ? null : doc.expiryDate,
+              enabled: !_isReadOnly,
+              onDateSelected: (d) => setState(() {
+                _documents[index].expiryDate = d;
+              }),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(flex: 3, child: _buildDocFileCell(index)),
+          const SizedBox(width: 2),
+          SizedBox(
+            width: 28,
+            child: IconButton(
+              icon: const Icon(Icons.close, size: 16),
+              color: const Color(0xFFF87171),
+              onPressed: _isReadOnly || _documents.length == 1
+                  ? null
+                  : () => _removeDocument(index),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
           ),
         ],
       ),
@@ -953,38 +1162,45 @@ class _PassEntryFormState extends State<PassEntryForm> {
   Widget _buildDocFileCell(int index) {
     final doc = _documents[index];
     if (doc.filePath != null && doc.filePath!.isNotEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFDCFCE7),
-          border: Border.all(color: const Color(0xFF86EFAC)),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle, size: 14, color: Color(0xFF15803D)),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                doc.fileName.isEmpty ? 'Uploaded' : doc.fileName,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF15803D),
-                ),
-                overflow: TextOverflow.ellipsis,
+      return GestureDetector(
+        onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFDCFCE7),
+            border: Border.all(color: const Color(0xFF86EFAC)),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle,
+                size: 13,
+                color: Color(0xFF15803D),
               ),
-            ),
-          ],
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  doc.fileName.isEmpty ? 'Uploaded' : doc.fileName,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF15803D),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return GestureDetector(
-      onTap: () => _pickFileForDoc(index),
+      onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFFDBEAFF),
           border: Border.all(
@@ -996,14 +1212,16 @@ class _PassEntryFormState extends State<PassEntryForm> {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_upload, size: 14, color: Color(0xFF1D4ED8)),
-            SizedBox(width: 4),
-            Text(
-              'Upload File',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1D4ED8),
+            Icon(Icons.cloud_upload, size: 13, color: Color(0xFF1D4ED8)),
+            SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                'Upload',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1D4ED8),
+                ),
               ),
             ),
           ],
@@ -1017,27 +1235,31 @@ class _PassEntryFormState extends State<PassEntryForm> {
     return GestureDetector(
       onTap: canAdd ? _addDocument : null,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: canAdd ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
           border: Border.all(
             color: canAdd ? const Color(0xFF93C5FD) : const Color(0xFFCBD5E1),
-            style: BorderStyle.solid,
           ),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_circle, size: 16, color: Color(0xFF1D4ED8)),
-            SizedBox(width: 6),
+            Icon(
+              Icons.add_circle,
+              size: 16,
+              color: canAdd ? const Color(0xFF1D4ED8) : const Color(0xFF94A3B8),
+            ),
+            const SizedBox(width: 6),
             Text(
               'Add Document',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1D4ED8),
+                color: canAdd
+                    ? const Color(0xFF1D4ED8)
+                    : const Color(0xFF94A3B8),
               ),
             ),
           ],
@@ -1048,8 +1270,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
   Widget _buildDocInfo() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFD),
         border: Border.all(color: const Color(0xFFDDE4EF)),
@@ -1061,9 +1282,9 @@ class _PassEntryFormState extends State<PassEntryForm> {
           SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Allowed Documents: RC, INSURANCE, LICENSE',
+              'Allowed: RC, INSURANCE, LICENSE (max 3)',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: Color(0xFF94A3B8),
                 fontWeight: FontWeight.w600,
               ),
@@ -1074,6 +1295,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
+  // ── ACTION BUTTONS ──────────────────────────────────────────────
   Widget _buildActionButtons() {
     final canEdit =
         !_isReadOnly &&
@@ -1083,99 +1305,87 @@ class _PassEntryFormState extends State<PassEntryForm> {
             _status == 'NEEDS_MODIFICATION' ||
             _status == 'NEEDSMODIFICATION');
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          if (canEdit)
-            PassActionButton(
-              label: 'Clear',
-              icon: Icons.close,
+    return Column(
+      children: [
+        if (canEdit) ...[
+          Row(
+            children: [
+              Expanded(
+                child: PassActionButton(
+                  label: _isSaving ? 'Saving...' : 'Save',
+                  icon: _isSaving ? Icons.hourglass_bottom : Icons.save,
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  onPressed: _isSaving ? null : () => _savePass(submit: false),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: PassActionButton(
+                  label: 'Submit',
+                  icon: Icons.send,
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  onPressed: _isSaving ? null : () => _savePass(submit: true),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: PassActionButton(
+              label: 'Clear Form',
+              icon: Icons.refresh,
               backgroundColor: const Color(0xFFF1F5F9),
               foregroundColor: const Color(0xFF475569),
-              onPressed: () {
-                // TODO: clear form or navigate back
-              },
+              onPressed: _clearForm,
             ),
-          if (canEdit)
-            PassActionButton(
-              label: _isSaving ? 'Saving...' : 'Save',
-              icon: _isSaving ? Icons.hourglass_bottom : Icons.save,
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              onPressed: _isSaving ? null : () => _savePass(submit: false),
-            ),
-          if (canEdit)
-            PassActionButton(
-              label: 'Submit',
-              icon: Icons.send,
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-              onPressed: _isSaving ? null : () => _savePass(submit: true),
-            ),
-          if (_isReadOnly)
-            PassActionButton(
+          ),
+        ],
+        if (_isReadOnly)
+          SizedBox(
+            width: double.infinity,
+            child: PassActionButton(
               label: 'Back',
               icon: Icons.arrow_back,
               backgroundColor: const Color(0xFFF1F5F9),
               foregroundColor: const Color(0xFF475569),
               onPressed: () => Navigator.pop(context),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
-  Widget _buildFetchError(String message) {
+  // ── MESSAGE BANNERS ─────────────────────────────────────────────
+  Widget _buildMessageBanner({required String message, required bool isError}) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
+        color: isError ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+        border: Border.all(
+          color: isError ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error, size: 16, color: Color(0xFF7F1D1D)),
-          const SizedBox(width: 6),
+          Icon(
+            isError ? Icons.error : Icons.check_circle,
+            size: 16,
+            color: isError ? const Color(0xFF7F1D1D) : const Color(0xFF14532D),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF7F1D1D),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFetchSuccess() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
-        border: Border.all(color: const Color(0xFF86EFAC)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle, size: 16, color: Color(0xFF14532D)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              'Employee Found : $_empName  $_empDept',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF14532D),
+                color: isError
+                    ? const Color(0xFF7F1D1D)
+                    : const Color(0xFF14532D),
               ),
             ),
           ),
@@ -1186,8 +1396,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
   Widget _buildAlert({required bool success, required String message}) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: success ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
         border: Border.all(
@@ -1199,15 +1408,15 @@ class _PassEntryFormState extends State<PassEntryForm> {
         children: [
           Icon(
             success ? Icons.check_circle : Icons.error,
-            size: 18,
+            size: 20,
             color: success ? const Color(0xFF14532D) : const Color(0xFF7F1D1D),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: success
                     ? const Color(0xFF14532D)

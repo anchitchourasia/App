@@ -125,6 +125,7 @@ class PassField extends StatelessWidget {
   final Widget? suffix;
   final String? hintTextExtra;
   final String? placeholder;
+  final double? width;
 
   const PassField({
     super.key,
@@ -140,12 +141,16 @@ class PassField extends StatelessWidget {
     this.suffix,
     this.hintTextExtra,
     this.placeholder,
+    this.width,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveController =
+        controller ?? TextEditingController(text: initialValue);
+
     return SizedBox(
-      width: 220,
+      width: width ?? 220,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -160,7 +165,7 @@ class PassField extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           TextField(
-            controller: controller,
+            controller: effectiveController,
             readOnly: readOnly,
             maxLines: maxLines,
             decoration: InputDecoration(
@@ -201,22 +206,22 @@ class PassField extends StatelessWidget {
               LengthLimitingTextInputFormatter(60),
             ],
             onChanged: (v) {
+              String transformed = v;
               if (textTransform == TextTransform.uppercase) {
-                final upper = v.toUpperCase();
-                if (controller != null && controller!.text != upper) {
-                  final pos = controller!.selection.baseOffset;
-                  controller!.text = upper;
-                  controller!.selection = TextSelection.collapsed(
+                transformed = v.toUpperCase();
+                if (effectiveController.text != transformed) {
+                  final pos = effectiveController.selection.baseOffset;
+                  effectiveController.text = transformed;
+                  effectiveController.selection = TextSelection.collapsed(
                     offset: pos < 0 ? 0 : pos,
                   );
                 }
+              } else if (textTransform == TextTransform.lowercase) {
+                transformed = v.toLowerCase();
               }
+
               if (onChanged != null) {
-                onChanged!(
-                  textTransform == TextTransform.uppercase
-                      ? v.toUpperCase()
-                      : v,
-                );
+                onChanged!(transformed);
               }
             },
             onSubmitted: onSubmitted,
@@ -244,6 +249,7 @@ class PassDropdown extends StatelessWidget {
   final List<String> items;
   final String hint;
   final ValueChanged<String?>? onChanged;
+  final double? width;
 
   const PassDropdown({
     super.key,
@@ -252,13 +258,14 @@ class PassDropdown extends StatelessWidget {
     required this.items,
     required this.hint,
     this.onChanged,
+    this.width,
   });
 
   @override
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
     return SizedBox(
-      width: 220,
+      width: width ?? 220,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -388,7 +395,9 @@ class PassFieldSmall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ctrl = TextEditingController(text: initialValue);
+    // Use ValueKey so Flutter knows when to rebuild/reset the controller.
     return TextField(
+      key: ValueKey(initialValue),
       controller: ctrl,
       readOnly: readOnly,
       decoration: InputDecoration(
@@ -407,18 +416,20 @@ class PassFieldSmall extends StatelessWidget {
         ),
       ),
       onChanged: (v) {
+        String transformed = v;
         if (textTransform == TextTransform.uppercase) {
-          final upper = v.toUpperCase();
-          if (ctrl.text != upper) {
+          transformed = v.toUpperCase();
+          if (ctrl.text != transformed) {
             final pos = ctrl.selection.baseOffset;
-            ctrl.text = upper;
+            ctrl.text = transformed;
             ctrl.selection = TextSelection.collapsed(offset: pos < 0 ? 0 : pos);
           }
+        } else if (textTransform == TextTransform.lowercase) {
+          transformed = v.toLowerCase();
         }
+
         if (onChanged != null) {
-          onChanged!(
-            textTransform == TextTransform.uppercase ? v.toUpperCase() : v,
-          );
+          onChanged!(transformed);
         }
       },
       onSubmitted: onSubmitted,
@@ -449,7 +460,9 @@ class PassDateFieldSmall extends StatelessWidget {
           int.parse(parts[1]),
           int.parse(parts[2]),
         );
-      } catch (_) {}
+      } catch (_) {
+        initialDate = DateTime.now();
+      }
     }
 
     final picked = await showDatePicker(
@@ -524,7 +537,10 @@ class PassActionButton extends StatelessWidget {
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16),
-      label: Text(label),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       style: ElevatedButton.styleFrom(
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,

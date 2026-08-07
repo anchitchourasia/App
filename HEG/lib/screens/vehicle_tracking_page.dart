@@ -5,6 +5,7 @@ import '../data/pass_registry_api.dart';
 import '../models/pass_registry_item.dart';
 import '../widgets/heg_app_bar.dart';
 import 'pass_entry/pass_entry_page.dart';
+import 'vpms/pass_sticker/pass_sticker_page.dart';
 
 class VehicleTrackingPage extends StatefulWidget {
   const VehicleTrackingPage({super.key});
@@ -244,9 +245,24 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   }
 
   void printSticker(PassRegistryItem row) {
-    ScaffoldMessenger.of(
+    Navigator.push(
       context,
-    ).showSnackBar(SnackBar(content: Text('Print sticker for ${row.passNo}')));
+      MaterialPageRoute(builder: (_) => PassStickerPage(passId: row.passId)),
+    );
+  }
+
+  void editPass(PassRegistryItem row) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PassEntryPage(
+        registryId: row.passId, // id from backend
+        isViewMode: false,
+        isApproverMode: false,
+      ),
+    );
+    loadPasses();
   }
 
   @override
@@ -676,6 +692,13 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                   foreground: const Color(0xFF334155),
                   background: const Color(0xFFF1F5F9),
                   onTap: () => printSticker(row),
+                ),
+                _actionButton(
+                  label: 'Edit',
+                  icon: Icons.edit_outlined,
+                  foreground: accentDark,
+                  background: const Color(0xFFEAF2FF),
+                  onTap: () => editPass(row),
                 ),
               ],
             ),
