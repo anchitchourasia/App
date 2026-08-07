@@ -1,29 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../widgets/heg_app_bar.dart';
-import 'pass_entry/pass_entry_page.dart';
 import '../data/pass_registry_api.dart';
 import '../models/pass_registry_item.dart';
-
-class PassDocument {
-  final int? documentId;
-  final String documentType;
-  final String documentNo;
-  final String expiryDate;
-  final String fileName;
-  final String existingFile;
-
-  const PassDocument({
-    required this.documentId,
-    required this.documentType,
-    required this.documentNo,
-    required this.expiryDate,
-    required this.fileName,
-    required this.existingFile,
-  });
-}
+import '../widgets/heg_app_bar.dart';
 
 class VehicleTrackingPage extends StatefulWidget {
   const VehicleTrackingPage({super.key});
@@ -33,871 +12,1271 @@ class VehicleTrackingPage extends StatefulWidget {
 }
 
 class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
-  final TextEditingController _vehicleController = TextEditingController();
-  final TextEditingController _brandController = TextEditingController();
-  final TextEditingController _ecController = TextEditingController();
-
   final PassRegistryApi _api = PassRegistryApi();
+  final TextEditingController _searchController = TextEditingController();
+
+  List<PassRegistryItem> _allPasses = [];
+  List<PassRegistryItem> _filteredPasses = [];
+
+  bool _loading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+
   Timer? _pollTimer;
-  List<PassRegistryItem> _rows = [];
-  List<PassRegistryItem> _filteredRows = [];
+  DateTime? _lastUpdated;
 
-  bool _loading = false;
-  bool _isReadOnly = false;
-  bool _showHistory = false;
-  bool _isDownloading = false;
-  bool _listLoading = true;
+  String _searchText = '';
+  String _filterStatus = 'ALL';
+  String _filterEmpType = 'ALL';
+  String _filterVehicleType = 'ALL';
 
-  String _query = '';
-  String _statusFilter = 'All';
-  String _empTypeFilter = 'All';
-  String _vehicleTypeFilter = 'All';
+  int _currentPage = 1;
+  int _pageSize = 10;
 
-  String _saveError = '';
-  String _saveSuccess = '';
-  String reviewRemark = '';
+  static const Duration _pollInterval = Duration(seconds: 30);
 
-  String _vehicleNo = 'MP09AB1234';
-  String _vehicleType = 'CAR';
-  String _brandModel = 'HONDA CITY';
-  String _employeeType = 'HEG';
-  String _ecNo = '70100';
-  String _employeeName = 'DEVENDRA KUMAR RAJAK';
-  String _department = 'PLANT';
-  String _deptCode = 'D001';
-  String _aadhar = '123456789012';
-  String _contractorCode = 'C001';
-  String _contractorName = 'ABC CONTRACTOR';
-  String _gateNo = 'GATE_01';
-  String _parkingToBeUsed = 'P1';
-  String _status = 'SUBMITTED';
-  String _enteredBy = 'SYSTEM';
-  int? _registryId = 1;
-  int? _passNo = 1;
+  static const Color _bg1 = Color(0xFF0B1E3A);
+  static const Color _bg2 = Color(0xFF0EA5A4);
 
-  final List<PassDocument> _documents = const [
-    PassDocument(
-      documentId: 1,
-      documentType: 'RC',
-      documentNo: 'RC-1',
-      expiryDate: '2026-07-31',
-      fileName: 'rc.pdf',
-      existingFile: 'rc.pdf',
-    ),
-    PassDocument(
-      documentId: 2,
-      documentType: 'INSURANCE',
-      documentNo: 'INS-2',
-      expiryDate: '2026-07-31',
-      fileName: 'insurance.pdf',
-      existingFile: 'insurance.pdf',
-    ),
-  ];
-
-  final List<_HistoryItem> _history = [
-    _HistoryItem(
-      action: 'CREATED',
-      remark: 'Pass created successfully',
-      empCode: 'SYSTEM',
-      dateOfEntry: '2026-08-04T09:00:00',
-    ),
-  ];
+  static const Color _pageBg = Color(0xFFF4F7FB);
+  static const Color _panelBg = Colors.white;
+  static const Color _panelBorder = Color(0xFFD9E2EC);
+  static const Color _textPrimary = Color(0xFF102A43);
+  static const Color _textSecondary = Color(0xFF627D98);
+  static const Color _accentDark = Color(0xFF0B1E3A);
+  static const Color _accentTeal = Color(0xFF0EA5A4);
 
   @override
   void initState() {
     super.initState();
-    _vehicleController.text = _vehicleNo;
-    _brandController.text = _brandModel;
-    _ecController.text = _ecNo;
-    _loadRegistry();
+    _loadPasses();
     _startPolling();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _vehicleController.dispose();
-    _brandController.dispose();
-    _ecController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _pollTimer = Timer.periodic(_pollInterval, (_) {
       if (!mounted) return;
-      _loadRegistry(silent: true);
+      _loadPasses(silent: true);
     });
   }
 
-  Future<void> _loadRegistry({bool silent = false}) async {
-    if (!silent) setState(() => _listLoading = true);
+  Future<void> _loadPasses({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _hasError = false;
+        _errorMessage = '';
+      });
+    }
+
     try {
-      final data = await _api.fetchPassRegistry();
-      _rows = data;
-      _applyFilters();
-    } catch (_) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to load vehicle registry')),
-        );
+      final rows = await _api.fetchPassRegistry();
+      if (!mounted) return;
+
+      setState(() {
+        _allPasses = rows;
+        _lastUpdated = DateTime.now();
+        _applyFilters();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      if (!silent) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
       }
     } finally {
-      if (!silent && mounted) setState(() => _listLoading = false);
+      if (!mounted) return;
+      if (!silent) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
   void _applyFilters() {
-    final q = _query.trim().toLowerCase();
-    _filteredRows = _rows.where((r) {
-      final searchOk = q.isEmpty || r.matchesSearch(q);
-      final statusOk = r.matchesStatus(_statusFilter);
-      final empOk = r.matchesEmpType(_empTypeFilter);
-      final vehicleOk = r.matchesVehicleType(_vehicleTypeFilter);
-      return searchOk && statusOk && empOk && vehicleOk;
+    _filteredPasses = _allPasses.where((row) {
+      return row.matchesSearch(_searchText) &&
+          row.matchesStatus(_filterStatus) &&
+          row.matchesEmpType(_filterEmpType) &&
+          row.matchesVehicleType(_filterVehicleType);
     }).toList();
-    setState(() {});
+
+    final total = totalPages;
+    if (_currentPage > total) _currentPage = total;
   }
 
-  bool get _canEdit {
-    if (_isReadOnly) return false;
-    final s = _status.toUpperCase();
-    return s == 'DRAFT' ||
-        s == 'SAVED' ||
-        s == 'MODIFY' ||
-        s == 'NEEDS_MODIFICATION' ||
-        s == 'NEEDSMODIFICATION';
+  List<String> get empTypeOptions {
+    final set = <String>{'ALL'};
+    for (final row in _allPasses) {
+      final value = row.empType.trim().toUpperCase();
+      if (value.isNotEmpty) set.add(value);
+    }
+    return set.toList();
   }
 
-  void _setVehicleNo(String value) {
-    if (!_canEdit) return;
-    final v = value.toUpperCase().replaceAll(RegExp(r'\s+'), '');
+  List<String> get vehicleTypeOptions {
+    final set = <String>{'ALL'};
+    for (final row in _allPasses) {
+      final value = row.vehicleType.trim().toUpperCase();
+      if (value.isNotEmpty) set.add(value);
+    }
+    return set.toList();
+  }
+
+  List<String> get statusOptions => const [
+    'ALL',
+    'DRAFT',
+    'SAVED',
+    'SUBMITTED',
+    'CONFIRMED',
+    'ACTIVE',
+    'NEEDS_MODIFICATION',
+    'REJECT',
+  ];
+
+  int get totalPages {
+    final total = (_filteredPasses.length / _pageSize).ceil();
+    return total <= 0 ? 1 : total;
+  }
+
+  List<PassRegistryItem> get pagedPasses {
+    final start = (_currentPage - 1) * _pageSize;
+    final end = start + _pageSize;
+    if (start >= _filteredPasses.length) return [];
+    return _filteredPasses.sublist(
+      start,
+      end > _filteredPasses.length ? _filteredPasses.length : end,
+    );
+  }
+
+  int get activeCount =>
+      _allPasses.where((e) => e.status.trim().toUpperCase() == 'ACTIVE').length;
+
+  int get draftCount => _allPasses.where((e) {
+    final s = e.status.trim().toUpperCase();
+    return s == 'DRAFT' || s == 'SAVED';
+  }).length;
+
+  int get rejectCount => _allPasses.where((e) {
+    final s = e.status.trim().toUpperCase();
+    return s == 'REJECT' || s == 'REJECTED' || s == 'REGRET';
+  }).length;
+
+  void _onSearch(String value) {
     setState(() {
-      _vehicleNo = v;
-      _vehicleController.text = v;
-      _vehicleController.selection = TextSelection.collapsed(offset: v.length);
+      _searchText = value;
+      _currentPage = 1;
+      _applyFilters();
     });
   }
 
-  void _setBrand(String value) {
-    if (!_canEdit) return;
-    final v = value.toUpperCase();
+  void _onStatusChange(String? value) {
+    if (value == null) return;
     setState(() {
-      _brandModel = v;
-      _brandController.text = v;
-      _brandController.selection = TextSelection.collapsed(offset: v.length);
+      _filterStatus = value;
+      _currentPage = 1;
+      _applyFilters();
     });
   }
 
-  void _setEc(String value) {
-    if (!_canEdit) return;
-    final v = value.toUpperCase();
+  void _onEmpTypeChange(String? value) {
+    if (value == null) return;
     setState(() {
-      _ecNo = v;
-      _ecController.text = v;
-      _ecController.selection = TextSelection.collapsed(offset: v.length);
+      _filterEmpType = value;
+      _currentPage = 1;
+      _applyFilters();
     });
   }
 
-  String _fmtDate(String date) {
+  void _onVehicleTypeChange(String? value) {
+    if (value == null) return;
+    setState(() {
+      _filterVehicleType = value;
+      _currentPage = 1;
+      _applyFilters();
+    });
+  }
+
+  void _changePage(int page) {
+    if (page < 1 || page > totalPages) return;
+    setState(() {
+      _currentPage = page;
+    });
+  }
+
+  String _formatDate(String date) {
     if (date.trim().isEmpty) return '-';
-    final dt = DateTime.tryParse(date);
-    if (dt == null) return date;
-    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-  }
-
-  String _month(int m) => [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][m - 1];
-
-  String _fmtDateTime(String d) {
-    if (d.isEmpty) return '—';
-    final dt = DateTime.tryParse(d);
-    if (dt == null) return d;
-    return '${dt.day.toString().padLeft(2, '0')} ${_month(dt.month)} ${dt.year}, ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _downloadDocument(PassDocument doc) async {
-    if (doc.documentId == null) return;
-    setState(() => _isDownloading = true);
     try {
-      final client = http.Client();
-      final res = await client.get(
-        Uri.parse(
-          'http://YOUR_API_BASE_URL/api/passes/documents/download/${doc.documentId}',
-        ),
-        headers: const {'x-api-key': 'VPMS_SECRET_KEY_2026'},
-      );
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final Uint8List bytes = res.bodyBytes;
-        if (bytes.isEmpty) throw Exception('Empty file');
-      } else {
-        throw Exception('Download failed');
-      }
+      final dt = DateTime.parse(date);
+      final dd = dt.day.toString().padLeft(2, '0');
+      final mm = dt.month.toString().padLeft(2, '0');
+      final yyyy = dt.year.toString();
+      return '$dd/$mm/$yyyy';
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to download document')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isDownloading = false);
+      return date;
     }
   }
 
-  void _save() {
-    if (!_canEdit) return;
-    setState(() {
-      _saveError = '';
-      _saveSuccess = 'Vehicle pass saved successfully.';
-      _registryId ??= 1;
-      _passNo ??= 1;
-      _status = 'SAVED';
-    });
+  Color _statusColor(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'SAVED':
+      case 'DRAFT':
+        return const Color(0xFF2563EB);
+      case 'SUBMITTED':
+        return const Color(0xFFD97706);
+      case 'CONFIRMED':
+        return const Color(0xFF0891B2);
+      case 'ACTIVE':
+      case 'APPROVED':
+        return const Color(0xFF15803D);
+      case 'NEEDS_MODIFICATION':
+      case 'NEEDSMODIFICATION':
+      case 'MODIFY':
+        return const Color(0xFFB45309);
+      case 'REJECT':
+      case 'REJECTED':
+      case 'REGRET':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFF6B7280);
+    }
   }
 
-  void _submit() {
-    if (!_canEdit) return;
-    setState(() {
-      _saveError = '';
-      _saveSuccess = 'Pass submitted successfully.';
-      _registryId ??= 1;
-      _passNo ??= 1;
-      _status = 'SUBMITTED';
-    });
+  void _viewPass(PassRegistryItem row) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PassDetailsSheet(
+        row: row,
+        formatDate: _formatDate,
+        statusColor: _statusColor(row.status),
+      ),
+    );
   }
 
-  void _approve() => setState(() => _status = 'ACTIVE');
-  void _reject() => setState(() => _status = 'REJECT');
-  void _modify() => setState(() => _status = 'MODIFY');
-
-  void _toggleHistory() => setState(() => _showHistory = !_showHistory);
-
-  void _openAddPass() {
-    Navigator.push(
+  void _printSticker(PassRegistryItem row) {
+    ScaffoldMessenger.of(
       context,
-      MaterialPageRoute(builder: (_) => const PassEntryPage()),
-    );
+    ).showSnackBar(SnackBar(content: Text('Print sticker for: ${row.passNo}')));
   }
-
-  Widget _fieldLabel(String label) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF1E3A6E),
-      ),
-    ),
-  );
-
-  Widget _roField(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _fieldLabel(label),
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFD9E2EC)),
-        ),
-        child: Text(
-          value.isEmpty ? '-' : value,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    ],
-  );
-
-  Widget _section(String title, Widget child) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFFD9E2EC)),
-    ),
-    child: Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0B1E3A), Color(0xFF163B6B)],
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.circle, size: 10, color: Colors.white),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(padding: const EdgeInsets.all(14), child: child),
-      ],
-    ),
-  );
-
-  Widget _chip(String label, String current, ValueChanged<String> onTap) {
-    final selected = current.toUpperCase() == label.toUpperCase();
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(label),
-    );
-  }
-
-  Widget _registryListSection() {
-    return _section(
-      'Vehicle Registry',
-      Column(
-        children: [
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search pass no, vehicle no, employee, contractor...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onChanged: (v) {
-              _query = v;
-              _applyFilters();
-            },
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _chip('All', _statusFilter, (v) {
-                _statusFilter = v;
-                _applyFilters();
-              }),
-              _chip('Active', _statusFilter, (v) {
-                _statusFilter = v;
-                _applyFilters();
-              }),
-              _chip('Needs_Modification', _statusFilter, (v) {
-                _statusFilter = v;
-                _applyFilters();
-              }),
-              _chip('Reject', _statusFilter, (v) {
-                _statusFilter = v;
-                _applyFilters();
-              }),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (_listLoading)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_filteredRows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('No pass records found'),
-            )
-          else
-            ..._filteredRows.map(
-              (item) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFD9E2EC)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.vehicleNo,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        Text(
-                          item.status,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text('Pass No: ${item.passNo}'),
-                    Text('Employee: ${item.name} (${item.empType})'),
-                    Text('Gate: ${item.gateNo}'),
-                    Text('Valid: ${item.validityDate}'),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _vehicleSection() => Column(
-    children: [
-      _fieldLabel('Vehicle Number *'),
-      TextField(
-        controller: _vehicleController,
-        readOnly: !_canEdit,
-        onChanged: _setVehicleNo,
-        decoration: const InputDecoration(hintText: 'MP09AB1234'),
-      ),
-      const SizedBox(height: 10),
-      _fieldLabel('Vehicle Type *'),
-      DropdownButtonFormField<String>(
-        value: _vehicleType,
-        items: const [
-          'BIKE',
-          'SCOOTER',
-          'CAR',
-          'TRUCK',
-          'DUMPER',
-          'JCB',
-          'CRANE',
-          'TRACTOR',
-        ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-        onChanged: _canEdit
-            ? (v) => setState(() => _vehicleType = v ?? '')
-            : null,
-      ),
-      const SizedBox(height: 10),
-      _fieldLabel('Brand / Model *'),
-      TextField(
-        controller: _brandController,
-        readOnly: !_canEdit,
-        onChanged: _setBrand,
-        decoration: const InputDecoration(hintText: 'Honda City / Tata Truck'),
-      ),
-      const SizedBox(height: 10),
-      _roField('Pass No', _passNo?.toString() ?? ''),
-    ],
-  );
-
-  Widget _employeeSection() => Column(
-    children: [
-      _fieldLabel('Employee Type *'),
-      DropdownButtonFormField<String>(
-        value: _employeeType,
-        items: const [
-          'HEG',
-          'TACC',
-          'CONTRACT',
-          'CRE-PRM',
-        ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-        onChanged: _canEdit
-            ? (v) => setState(() => _employeeType = v ?? '')
-            : null,
-      ),
-      const SizedBox(height: 10),
-      _fieldLabel('EC No *'),
-      TextField(
-        controller: _ecController,
-        readOnly: !_canEdit,
-        onChanged: _setEc,
-        decoration: InputDecoration(
-          hintText: 'Enter Employee Code',
-          suffixIcon: _loading
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : null,
-        ),
-      ),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _roField('Employee Name', _employeeName)),
-          const SizedBox(width: 8),
-          Expanded(child: _roField('Department', _department)),
-        ],
-      ),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _roField('Dept Code', _deptCode)),
-          const SizedBox(width: 8),
-          Expanded(child: _roField('Aadhar', _aadhar)),
-        ],
-      ),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _roField('Contractor Code', _contractorCode)),
-          const SizedBox(width: 8),
-          Expanded(child: _roField('Contractor Name', _contractorName)),
-        ],
-      ),
-    ],
-  );
-
-  Widget _passSection() => Row(
-    children: [
-      Expanded(child: _roField('Gate No', _gateNo)),
-      const SizedBox(width: 8),
-      Expanded(child: _roField('Parking To Be Used', _parkingToBeUsed)),
-    ],
-  );
-
-  Widget _documentsSection() => Column(
-    children: _documents
-        .map(
-          (doc) => Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD9E2EC)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        doc.documentType.isEmpty
-                            ? 'Document'
-                            : doc.documentType,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    if (doc.documentId != null)
-                      IconButton(
-                        onPressed: _isDownloading
-                            ? null
-                            : () => _downloadDocument(doc),
-                        icon: const Icon(
-                          Icons.download,
-                          color: Color(0xFF0B1E3A),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                _roField('Document No', doc.documentNo),
-                const SizedBox(height: 8),
-                _roField('Expiry Date', _fmtDate(doc.expiryDate)),
-                const SizedBox(height: 8),
-                _roField(
-                  'File',
-                  doc.existingFile.isNotEmpty ? doc.existingFile : doc.fileName,
-                ),
-              ],
-            ),
-          ),
-        )
-        .toList(),
-  );
-
-  Widget _statusSection() => _section(
-    'Workflow Status',
-    Row(
-      children: [
-        Expanded(child: _roField('Current Status', _status)),
-        const SizedBox(width: 8),
-        Expanded(child: _roField('Entered By', _enteredBy)),
-        const SizedBox(width: 8),
-        Expanded(child: _roField('Pass No', _passNo?.toString() ?? '-')),
-      ],
-    ),
-  );
-
-  Widget _historySection() => _section(
-    'Pass History',
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextButton.icon(
-          onPressed: _toggleHistory,
-          icon: Icon(_showHistory ? Icons.visibility_off : Icons.history),
-          label: Text(_showHistory ? 'Hide History' : 'Show History'),
-        ),
-        if (_showHistory)
-          ..._history.map(
-            (h) => Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD9E2EC)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    h.action,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _fmtDateTime(h.dateOfEntry),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF627D98),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('By: ${h.empCode}'),
-                  const SizedBox(height: 4),
-                  Text(h.remark),
-                ],
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-
-  Widget _remarkSection() => _section(
-    'Review Remark',
-    Column(
-      children: [
-        TextField(
-          onChanged: (v) => reviewRemark = v,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'Enter remark'),
-        ),
-        const SizedBox(height: 8),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Remark required for workflow action',
-            style: TextStyle(fontSize: 12, color: Color(0xFF627D98)),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _actionsSection() => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      if (_canEdit)
-        _actionButton(
-          'Save',
-          Icons.save,
-          _save,
-          bg: const Color(0xFF1D4ED8),
-          fg: Colors.white,
-        ),
-      if (_canEdit)
-        _actionButton(
-          'Submit',
-          Icons.send,
-          _submit,
-          bg: const Color(0xFF15803D),
-          fg: Colors.white,
-        ),
-      if (_status == 'SUBMITTED' && !_isReadOnly)
-        _actionButton(
-          'Send Modification',
-          Icons.edit,
-          _modify,
-          bg: const Color(0xFFF59E0B),
-          fg: Colors.white,
-        ),
-      if (_status == 'SUBMITTED' || _status == 'CONFIRMED')
-        _actionButton(
-          'Approve',
-          Icons.check_circle,
-          _approve,
-          bg: const Color(0xFF15803D),
-          fg: Colors.white,
-        ),
-      if (_status == 'SUBMITTED' || _status == 'CONFIRMED')
-        _actionButton(
-          'Reject',
-          Icons.cancel,
-          _reject,
-          bg: const Color(0xFFDC2626),
-          fg: Colors.white,
-        ),
-      if (!_canEdit && _status != 'SUBMITTED' && _status != 'CONFIRMED')
-        _actionButton(
-          'Back',
-          Icons.arrow_back,
-          () {},
-          bg: const Color(0xFFF1F5F9),
-          fg: const Color(0xFF475569),
-        ),
-    ],
-  );
-
-  Widget _actionButton(
-    String label,
-    IconData icon,
-    VoidCallback onTap, {
-    required Color bg,
-    required Color fg,
-  }) => SizedBox(
-    width: double.infinity,
-    child: ElevatedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: bg,
-        foregroundColor: fg,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    ),
-  );
-
-  Widget _toast(String text, bool success) => Container(
-    margin: const EdgeInsets.only(top: 12),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: success ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: success ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5),
-      ),
-    ),
-    child: Row(
-      children: [
-        Icon(
-          success ? Icons.check_circle : Icons.error_outline,
-          color: success ? const Color(0xFF15803D) : const Color(0xFFDC2626),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text)),
-      ],
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FB),
-      appBar: const HegAppBar(title: 'Pass Entry'),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddPass,
-        backgroundColor: const Color(0xFF0EA5A4),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Pass'),
+      backgroundColor: Colors.white,
+      appBar: const HegAppBar(title: 'Pass Registry'),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [_bg1, _bg2],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            : _hasError
+            ? _ErrorView(message: _errorMessage, onRetry: () => _loadPasses())
+            : RefreshIndicator(
+                color: _accentTeal,
+                onRefresh: () => _loadPasses(),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                  children: [
+                    _buildSummaryPanel(),
+                    const SizedBox(height: 10),
+                    _buildControlPanel(),
+                    const SizedBox(height: 12),
+                    if (pagedPasses.isEmpty)
+                      const _EmptyState()
+                    else
+                      ...pagedPasses.map((row) => _buildPassCard(row)),
+                    const SizedBox(height: 12),
+                    _buildPaginationPanel(),
+                  ],
+                ),
+              ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildSummaryPanel() {
+    final lastUpdatedText = _lastUpdated == null
+        ? '-'
+        : '${_lastUpdated!.hour.toString().padLeft(2, '0')}:${_lastUpdated!.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withAlpha(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Vehicle Pass Registry',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read-only registry view with search and filters',
+            style: TextStyle(
+              color: Colors.white.withAlpha(185),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
             children: [
-              _headerCard(),
+              Expanded(
+                child: _summaryStat('Total', _allPasses.length.toString()),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _summaryStat('Active', activeCount.toString())),
+              const SizedBox(width: 8),
+              Expanded(child: _summaryStat('Draft', draftCount.toString())),
+              const SizedBox(width: 8),
+              Expanded(child: _summaryStat('Reject', rejectCount.toString())),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF22C55E),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Last updated: $lastUpdatedText',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(190),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Page $_currentPage/$totalPages',
+                style: TextStyle(
+                  color: Colors.white.withAlpha(190),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryStat(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(16),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withAlpha(18)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withAlpha(165),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControlPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _panelBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _panelBorder),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0C000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            onChanged: _onSearch,
+            style: const TextStyle(
+              color: _textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 20,
+                color: _textSecondary,
+              ),
+              hintText: 'Search pass no, vehicle no, employee, contractor',
+              hintStyle: const TextStyle(fontSize: 13, color: _textSecondary),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _panelBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _accentTeal, width: 1.2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDropdown(
+                  'Status',
+                  _filterStatus,
+                  statusOptions,
+                  _onStatusChange,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDropdown(
+                  'Emp Type',
+                  _filterEmpType,
+                  empTypeOptions,
+                  _onEmpTypeChange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildDropdown(
+            'Vehicle Type',
+            _filterVehicleType,
+            vehicleTypeOptions,
+            _onVehicleTypeChange,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdown(
+    String label,
+    String value,
+    List<String> items,
+    void Function(String?) onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      value: items.contains(value) ? value : items.first,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: _textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _panelBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _accentTeal, width: 1.2),
+        ),
+      ),
+      items: items
+          .map(
+            (e) => DropdownMenuItem<String>(
+              value: e,
+              child: Text(
+                e,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _textPrimary,
+                ),
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildPassCard(PassRegistryItem row) {
+    final badgeColor = _statusColor(row.status);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _panelBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _panelBorder),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0C000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 5,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: _textPrimary,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        children: [
+                          _topMeta(
+                            'Pass',
+                            row.passNo.isEmpty ? '-' : row.passNo,
+                          ),
+                          _topMeta(
+                            'Gate',
+                            row.gateNo.isEmpty ? '-' : row.gateNo,
+                          ),
+                          _topMeta(
+                            'Type',
+                            row.vehicleType.isEmpty ? '-' : row.vehicleType,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withAlpha(18),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: badgeColor.withAlpha(40)),
+                  ),
+                  child: Text(
+                    row.status.isEmpty ? 'UNKNOWN' : row.status,
+                    style: TextStyle(
+                      color: badgeColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: _panelBorder),
+            const SizedBox(height: 12),
+            _dataLine('Employee', row.name),
+            _dataLine('EC No', row.employeeNo),
+            _dataLine('Emp Type', row.empType),
+            _dataLine('Department', row.deptName),
+            if (row.contractorName.isNotEmpty)
+              _dataLine('Contractor', row.contractorName),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _dateBox('Issue Date', _formatDate(row.issueDate)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _dateBox('Validity', _formatDate(row.validityDate)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _actionButton(
+                  label: 'View',
+                  icon: Icons.visibility_outlined,
+                  foreground: _accentDark,
+                  background: const Color(0xFFEAF2FF),
+                  onTap: () => _viewPass(row),
+                ),
+                _actionButton(
+                  label: 'Sticker',
+                  icon: Icons.print_outlined,
+                  foreground: const Color(0xFF334155),
+                  background: const Color(0xFFF1F5F9),
+                  onTap: () => _printSticker(row),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _topMeta(String label, String value) {
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          fontSize: 12,
+          color: _textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
+        children: [
+          TextSpan(text: '$label: '),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: _textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '-' : value,
+              style: const TextStyle(
+                color: _textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateBox(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _panelBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: _textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: _textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required Color foreground,
+    required Color background,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: foreground.withAlpha(28)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: foreground),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaginationPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _panelBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _panelBorder),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Rows per page',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Wrap(
+                spacing: 6,
+                children: [10, 20, 50].map((size) {
+                  final selected = _pageSize == size;
+                  return ChoiceChip(
+                    label: Text(
+                      '$size',
+                      style: TextStyle(
+                        color: selected ? Colors.white : _textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    selected: selected,
+                    selectedColor: _accentTeal,
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    side: const BorderSide(color: _panelBorder),
+                    onSelected: (_) {
+                      setState(() {
+                        _pageSize = size;
+                        _currentPage = 1;
+                        _applyFilters();
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: _currentPage > 1
+                    ? () => _changePage(_currentPage - 1)
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _panelBorder),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Prev'),
+              ),
+              Expanded(
+                child: Center(
+                  child: Text(
+                    'Page $_currentPage of $totalPages',
+                    style: const TextStyle(
+                      color: _textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _currentPage < totalPages
+                    ? () => _changePage(_currentPage + 1)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accentDark,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text('Next'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PassDetailsSheet extends StatelessWidget {
+  final PassRegistryItem row;
+  final String Function(String) formatDate;
+  final Color statusColor;
+
+  const _PassDetailsSheet({
+    required this.row,
+    required this.formatDate,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.86,
+      decoration: const BoxDecoration(
+        color: Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          Container(
+            width: 42,
+            height: 4,
+            decoration: BoxDecoration(
+              color: const Color(0xFFBCCCDC),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 10, 0),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Pass Details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF102A43),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0B1E3A), Color(0xFF0EA5A4)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _detailChip('Pass No', row.passNo),
+                          _detailChip('Gate', row.gateNo),
+                          _detailChip('Type', row.vehicleType),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(20),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white.withAlpha(28)),
+                        ),
+                        child: Text(
+                          row.status.isEmpty ? 'UNKNOWN' : row.status,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _detailSection(
+                  title: 'Employee Information',
+                  children: [
+                    _detailRow('Employee Name', row.name),
+                    _detailRow('Employee No', row.employeeNo),
+                    _detailRow('Employee Type', row.empType),
+                    _detailRow('Department Code', row.deptCode),
+                    _detailRow('Department Name', row.deptName),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _detailSection(
+                  title: 'Vehicle & Pass',
+                  children: [
+                    _detailRow('Pass ID', row.passId.toString()),
+                    _detailRow('Pass No', row.passNo),
+                    _detailRow('Vehicle No', row.vehicleNo),
+                    _detailRow('Vehicle Type', row.vehicleType),
+                    _detailRow('Gate No', row.gateNo),
+                    _detailRow('Status', row.status),
+                    _detailRow('Issue Date', formatDate(row.issueDate)),
+                    _detailRow('Validity Date', formatDate(row.validityDate)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _detailSection(
+                  title: 'Contractor / Additional',
+                  children: [
+                    _detailRow('Contractor Code', row.contractorCode),
+                    _detailRow('Contractor Name', row.contractorName),
+                    _detailRow('Aadhaar / Mobile', row.aadhaarNo),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Close'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0B1E3A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailChip(String label, String value) {
+    final safeValue = value.isEmpty ? '-' : value;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(16),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $safeValue',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailSection({
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD9E2EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF102A43),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    final safeValue = value.trim().isEmpty ? '-' : value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 124,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF627D98),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              safeValue,
+              style: const TextStyle(
+                color: Color(0xFF102A43),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFD9E2EC)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Color(0xFFDC2626),
+                size: 40,
+              ),
               const SizedBox(height: 12),
-              _registryListSection(),
-              _section('Vehicle Details', _vehicleSection()),
-              _section('Employee / Contractor Details', _employeeSection()),
-              _section('Pass Details', _passSection()),
-              _section('Required Documents', _documentsSection()),
-              _statusSection(),
-              const SizedBox(height: 12),
-              if (_registryId != null) _historySection(),
-              if (reviewRemark.isNotEmpty) _remarkSection(),
-              const SizedBox(height: 12),
-              _actionsSection(),
-              if (_saveSuccess.isNotEmpty) _toast(_saveSuccess, true),
-              if (_saveError.isNotEmpty) _toast(_saveError, false),
+              const Text(
+                'Failed to load pass registry',
+                style: TextStyle(
+                  color: Color(0xFF102A43),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Color(0xFF627D98),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0B1E3A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                ),
+                child: const Text('Retry'),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _headerCard() => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [Color(0xFF0B1E3A), Color(0xFF0EA5A4)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.badge, color: Colors.white),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Pass Entry Form',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _registryId != null
-                    ? 'ID : $_registryId'
-                    : 'Request ID generates on Save',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(220),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
-class _HistoryItem {
-  final String action;
-  final String remark;
-  final String empCode;
-  final String dateOfEntry;
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
 
-  const _HistoryItem({
-    required this.action,
-    required this.remark,
-    required this.empCode,
-    required this.dateOfEntry,
-  });
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD9E2EC)),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
+          SizedBox(height: 10),
+          Text(
+            'No pass records found',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF102A43),
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Try changing search text or filter values.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF627D98),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
