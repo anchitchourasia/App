@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'pass_entry_models.dart';
 import 'pass_entry_service.dart';
-import 'pass_entry_widgets.dart';
 import '../../widgets/heg_app_bar.dart';
 import '../../core/app_config.dart';
 
@@ -21,60 +20,50 @@ class _PassEntryPageState extends State<PassEntryPage> {
   final TextEditingController _vehicleController = TextEditingController();
   final TextEditingController _brandController = TextEditingController();
   final TextEditingController _ecController = TextEditingController();
+  final TextEditingController _remarkController = TextEditingController();
+  final TextEditingController _reviewRemarkController = TextEditingController();
+  final TextEditingController _gateController = TextEditingController();
+  final TextEditingController _parkingController = TextEditingController();
 
   String vehicleNo = '';
   String vehicleType = '';
   String brandModel = '';
-
   String employeeNo = '';
   String ecNo = '';
   String empType = '';
   String? contractorCode;
-
   String gateNo = '';
   String parkingToBeUsed = '';
-
   String status = PassStatus.DRAFT;
   String? remark;
   String enterBy = '';
-
   String empName = '';
   String empDept = '';
   String empDeptCode = '';
   String empAadhar = '';
   String empContractorCode = '';
   String empContractorName = '';
-
   List<PassDocument> documents = [PassDocument.empty()];
   int? registryId;
   int? passNo;
-
   bool fetchingEmployee = false;
   String empFetchError = '';
   bool isSaving = false;
   bool saved = false;
   String saveSuccess = '';
   String saveError = '';
-
   bool isViewMode = false;
   bool isApproverMode = false;
   bool isConfirmerMode = false;
-
   String modificationRemark = '';
   String reviewRemark = '';
-
   bool showPassHistory = false;
   bool isLoadingPassHistory = false;
   String passHistoryError = '';
   List<HistoryRecord> passHistory = [];
 
   bool get isApproverView => isApproverMode;
-
-  bool get isReadOnlyMode {
-    if (isViewMode) return true;
-    return !canEdit;
-  }
-
+  bool get isReadOnlyMode => isViewMode || !canEdit;
   bool get canEdit {
     if (isViewMode || isApproverView) return false;
     final s = status.toUpperCase();
@@ -95,12 +84,10 @@ class _PassEntryPageState extends State<PassEntryPage> {
       apiKey: AppConfig.apiKey,
     );
 
-    _vehicleController.text = vehicleNo;
-    _brandController.text = brandModel;
-    _ecController.text = ecNo;
-
     if (widget.mode == 'view') isViewMode = true;
     if (widget.mode == 'approver') isApproverMode = true;
+
+    _syncControllers();
 
     if (widget.id != null) {
       registryId = widget.id;
@@ -113,6 +100,10 @@ class _PassEntryPageState extends State<PassEntryPage> {
     _vehicleController.dispose();
     _brandController.dispose();
     _ecController.dispose();
+    _remarkController.dispose();
+    _reviewRemarkController.dispose();
+    _gateController.dispose();
+    _parkingController.dispose();
     super.dispose();
   }
 
@@ -120,6 +111,15 @@ class _PassEntryPageState extends State<PassEntryPage> {
     _vehicleController.text = vehicleNo;
     _brandController.text = brandModel;
     _ecController.text = ecNo;
+    _remarkController.text = remark ?? '';
+    _reviewRemarkController.text = reviewRemark;
+    _gateController.text = gateNo;
+    _parkingController.text = parkingToBeUsed;
+  }
+
+  void _setStateAndSync(VoidCallback fn) {
+    setState(fn);
+    _syncControllers();
   }
 
   void onUpperInput(String field, String value) {
@@ -228,37 +228,376 @@ class _PassEntryPageState extends State<PassEntryPage> {
 
   void _save() {
     if (!canEdit) return;
-    setState(() {
-      saveError = '';
-      saveSuccess = 'Vehicle pass saved successfully.';
-      registryId ??= 1;
-      passNo ??= 1;
-      status = 'SAVED';
-      saved = true;
-    });
+    _persistPass(isSubmit: false);
   }
 
   void _submit() {
     if (!canEdit) return;
-    setState(() {
-      saveError = '';
-      saveSuccess = 'Pass submitted successfully.';
-      registryId ??= 1;
-      passNo ??= 1;
-      status = 'SUBMITTED';
-      saved = true;
-    });
+    _persistPass(isSubmit: true);
   }
 
-  void _approve() => setState(() => status = 'ACTIVE');
-  void _reject() => setState(() => status = 'REJECT');
-  void _modify() => setState(() => status = 'MODIFY');
+  void _approve() {
+    if (registryId == null) return;
+    _updateStatus('ACTIVE');
+  }
+
+  void _reject() {
+    if (registryId == null) return;
+    _updateStatus(PassStatus.REJECT);
+  }
+
+  void _modify() {
+    if (registryId == null) return;
+    _updateStatus(PassStatus.MODIFY);
+  }
+
+  void _confirmPass() {
+    if (registryId == null) return;
+    _updateStatus(PassStatus.CONFIRMED);
+  }
+
+  void _updateStatus(String newStatus) async {
+    setState(() {
+      isSaving = true;
+      saveError = '';
+      saveSuccess = '';
+    });
+    try {
+      await _service.updatePassStatus(
+        registryId!,
+        newStatus,
+        remark: reviewRemark.isNotEmpty ? reviewRemark : (remark ?? ''),
+        enterBy: enterBy,
+      );
+      final refreshed = await _service.loadPass(registryId!);
+      _applyLoadedPass(refreshed);
+      setState(() {
+        saveSuccess = 'Workflow action completed successfully.';
+      });
+      if (showPassHistory) {
+        await _loadPassHistory(registryId!);
+      }
+    } catch (e) {
+      setState(() {
+        saveError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
+  }
+
+  bool _validateVehicle() {
+    if (vehicleNo.trim().isEmpty) {
+      saveError = 'Vehicle Number is required.';
+      return false;
+    }
+    if (vehicleType.trim().isEmpty) {
+      saveError = 'Vehicle Type is required.';
+      return false;
+    }
+    if (brandModel.trim().isEmpty) {
+      saveError = 'Brand / Model is required.';
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateEmployee() {
+    if (empType.trim().isEmpty) {
+      saveError = 'Please select Employee Type.';
+      return false;
+    }
+    if (ecNo.trim().isEmpty) {
+      saveError = 'Employee Code is required.';
+      return false;
+    }
+    if (empName.trim().isEmpty) {
+      saveError = 'Please verify Employee Code.';
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateGateAndParking() {
+    if (gateNo.trim().isEmpty) {
+      saveError = 'Gate No is required.';
+      return false;
+    }
+    if (parkingToBeUsed.trim().isEmpty) {
+      saveError = 'Parking To Be Used is required.';
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateDocuments() {
+    if (documents.isEmpty) {
+      saveError = 'Please add at least one document.';
+      return false;
+    }
+    for (var i = 0; i < documents.length; i++) {
+      final doc = documents[i];
+      if (doc.documentType.trim().isEmpty) {
+        saveError = 'Please select Document Type for row ${i + 1}.';
+        return false;
+      }
+      if (doc.documentNo.trim().isEmpty) {
+        saveError = 'Please enter Document Number for row ${i + 1}.';
+        return false;
+      }
+      if (doc.expiryDate.trim().isEmpty) {
+        saveError = 'Please select Expiry Date for row ${i + 1}.';
+        return false;
+      }
+      if (doc.file == null && doc.existingFile.trim().isEmpty) {
+        saveError = 'Please upload a file for row ${i + 1}.';
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _validateForm() {
+    saveError = '';
+    if (!_validateVehicle()) return false;
+    if (!_validateEmployee()) return false;
+    if (!_validateGateAndParking()) return false;
+    if (!_validateDocuments()) return false;
+    return true;
+  }
+
+  Map<String, dynamic> _buildRequest({required String finalStatus}) {
+    return {
+      'id': registryId,
+      'passNo': passNo,
+      'vehicleNo': vehicleNo.trim(),
+      'vehicleType': vehicleType.trim(),
+      'brandModel': brandModel.trim(),
+      'employeeNo': ecNo.trim(),
+      'empType': empType,
+      'contractorCode': contractorCode,
+      'gateNo': gateNo.trim(),
+      'parkingToBeUsed': parkingToBeUsed.trim(),
+      'status': finalStatus,
+      'remark': remark,
+      'enterBy': enterBy,
+      'documents': documents
+          .map(
+            (d) => {
+              'documentId': d.documentId,
+              'documentType': d.documentType,
+              'documentNo': d.documentNo,
+              'expiryDate': d.expiryDate,
+              'fileKey': d.fileKey,
+              'fileName': d.fileName,
+              'existingFile': d.existingFile,
+            },
+          )
+          .toList(),
+    };
+  }
+
+  Future<void> _persistPass({required bool isSubmit}) async {
+    if (!canEdit) return;
+    if (!_validateForm()) {
+      setState(() {});
+      return;
+    }
+
+    setState(() {
+      isSaving = true;
+      saveError = '';
+      saveSuccess = '';
+    });
+
+    try {
+      final request = _buildRequest(
+        finalStatus: isSubmit ? PassStatus.SUBMITTED : PassStatus.SAVED,
+      );
+
+      final files = <UploadFilePart>[];
+      for (final d in documents) {
+        final file = d.file;
+        if (file != null && file is String && file.isNotEmpty) {
+          files.add(
+            UploadFilePart(
+              key: d.fileKey.isNotEmpty
+                  ? d.fileKey
+                  : 'document_${files.length}',
+              path: file,
+              filename: d.fileName,
+            ),
+          );
+        }
+      }
+
+      PassRegistryResponseDTO response;
+      if (registryId == null) {
+        response = await _service.savePass(request);
+      } else {
+        response = await _service.updatePass(registryId!, request);
+      }
+
+      _applyLoadedPass(response);
+      setState(() {
+        saved = true;
+        saveSuccess = isSubmit
+            ? 'Pass submitted successfully.'
+            : 'Vehicle pass saved successfully.';
+      });
+      if (isSubmit) {
+        _updateStatus(PassStatus.SUBMITTED);
+      }
+    } catch (e) {
+      setState(() {
+        saveError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
+  }
+
+  void _applyLoadedPass(PassRegistryResponseDTO response) {
+    registryId = response.id;
+    passNo = response.passNo;
+    vehicleNo = response.vehicleNo;
+    vehicleType = response.vehicleType;
+    brandModel = response.brandModel;
+    employeeNo = response.employeeNo;
+    ecNo = response.employeeNo;
+    empType = response.empType;
+    contractorCode = response.contractorCode.isEmpty
+        ? null
+        : response.contractorCode;
+    gateNo = response.gateNo;
+    parkingToBeUsed = response.parkingToBeUsed;
+    status = response.reqStatus.isEmpty ? PassStatus.DRAFT : response.reqStatus;
+    enterBy = enterBy.isEmpty ? 'SYSTEM' : enterBy;
+    documents = response.documents.isNotEmpty
+        ? response.documents
+        : [PassDocument.empty()];
+    saved = true;
+    _syncControllers();
+  }
+
+  Future<void> _loadPass(int id) async {
+    setState(() => isSaving = true);
+    try {
+      final response = await _service.loadPass(id);
+      _applyLoadedPass(response);
+      saveSuccess = 'Pass details loaded successfully.';
+    } catch (e) {
+      saveError = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => isSaving = false);
+    }
+  }
+
+  Future<void> _loadPassHistory(int id) async {
+    setState(() {
+      isLoadingPassHistory = true;
+      passHistoryError = '';
+    });
+    try {
+      final res = await _service.loadHistory(id);
+      passHistory = res;
+    } catch (_) {
+      passHistoryError = 'Unable to load pass history.';
+    } finally {
+      if (mounted) setState(() => isLoadingPassHistory = false);
+    }
+  }
 
   void _toggleHistory() {
     setState(() => showPassHistory = !showPassHistory);
     if (showPassHistory && passHistory.isEmpty && registryId != null) {
-      loadPassHistory(registryId!);
+      _loadPassHistory(registryId!);
     }
+  }
+
+  Future<void> _pickDateForDoc(int index) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          DateTime.tryParse(documents[index].expiryDate) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null) {
+      setState(() {
+        documents[index].expiryDate =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
+  Future<void> _pickDateForFields(TextEditingController controller) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(controller.text) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null) {
+      controller.text =
+          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      setState(() {});
+    }
+  }
+
+  void onEcNoBlur() async {
+    if (ecNo.trim().isEmpty || empType.trim().isEmpty) return;
+    setState(() {
+      fetchingEmployee = true;
+      empFetchError = '';
+      _clearEmployeeData();
+    });
+    try {
+      final emp = await _service.loadEmployee(ecNo.trim());
+      if (emp.empType != null && emp.empType!.trim().isNotEmpty) {
+        final selected = empType.trim().toUpperCase();
+        final apiType = emp.empType!.trim().toUpperCase();
+        if (selected != apiType) {
+          empFetchError =
+              'Employee Type mismatch. Selected: $selected, Found: $apiType';
+          return;
+        }
+      }
+      empName = emp.name ?? '';
+      empDept = (emp.deptName ?? '').toUpperCase();
+      empDeptCode = emp.deptCode ?? '';
+      empAadhar = emp.aadhaarNo ?? '';
+      empContractorCode = emp.contractorCode ?? '';
+      contractorCode = emp.contractorCode;
+      empContractorName = emp.contractorName ?? '';
+      employeeNo = ecNo.trim().toUpperCase();
+    } catch (e) {
+      empFetchError = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => fetchingEmployee = false);
+    }
+  }
+
+  void addDocument() {
+    if (isReadOnlyMode) return;
+    if (documents.isNotEmpty) {
+      final last = documents.last;
+      if (last.documentType.isEmpty ||
+          last.documentNo.isEmpty ||
+          last.expiryDate.isEmpty) {
+        saveError =
+            'Please complete the current document before adding a new one.';
+        setState(() {});
+        return;
+      }
+    }
+    setState(() => documents.add(PassDocument.empty()));
+  }
+
+  void removeDocument(int index) {
+    if (isReadOnlyMode) return;
+    if (documents.length == 1) return;
+    setState(() => documents.removeAt(index));
   }
 
   Widget _fieldLabel(String label) => Padding(
@@ -326,6 +665,28 @@ class _PassEntryPageState extends State<PassEntryPage> {
         ),
         Padding(padding: const EdgeInsets.all(14), child: child),
       ],
+    ),
+  );
+
+  Widget sectionCard(String title, Widget child) => _section(title, child);
+
+  Widget messageBox(String message, {required bool success}) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.only(top: 8),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: success ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: success ? const Color(0xFFA5D6A7) : const Color(0xFFEF9A9A),
+      ),
+    ),
+    child: Text(
+      message,
+      style: TextStyle(
+        color: success ? const Color(0xFF1B5E20) : const Color(0xFFC62828),
+        fontWeight: FontWeight.w600,
+      ),
     ),
   );
 
@@ -433,16 +794,36 @@ class _PassEntryPageState extends State<PassEntryPage> {
       ],
       if (empName.isNotEmpty && !fetchingEmployee && empFetchError.isEmpty) ...[
         const SizedBox(height: 10),
-        messageBox('Employee Found : $empName  $empDept', success: true),
+        messageBox('Employee Found : $empName $empDept', success: true),
       ],
     ],
   );
 
-  Widget _passSection() => Row(
+  Widget _passSection() => Column(
     children: [
-      Expanded(child: _roField('Gate No', gateNo)),
-      const SizedBox(width: 8),
-      Expanded(child: _roField('Parking To Be Used', parkingToBeUsed)),
+      Row(
+        children: [
+          Expanded(child: _roField('Gate No', gateNo)),
+          const SizedBox(width: 8),
+          Expanded(child: _roField('Parking To Be Used', parkingToBeUsed)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      if (canEdit) ...[
+        _fieldLabel('Gate No *'),
+        TextField(
+          controller: _gateController,
+          readOnly: !canEdit,
+          onChanged: (v) => setState(() => gateNo = v.toUpperCase()),
+        ),
+        const SizedBox(height: 10),
+        _fieldLabel('Parking To Be Used *'),
+        TextField(
+          controller: _parkingController,
+          readOnly: !canEdit,
+          onChanged: (v) => setState(() => parkingToBeUsed = v.toUpperCase()),
+        ),
+      ],
     ],
   );
 
@@ -488,11 +869,44 @@ class _PassEntryPageState extends State<PassEntryPage> {
                 ],
               ),
               const SizedBox(height: 6),
-              _roField('Document Type', doc.documentType),
-              const SizedBox(height: 8),
-              _roField('Document No', doc.documentNo),
-              const SizedBox(height: 8),
-              _roField('Expiry Date', formatDateDDMMYYYY(doc.expiryDate)),
+              if (canEdit) ...[
+                _fieldLabel('Document Type'),
+                DropdownButtonFormField<String>(
+                  initialValue: doc.documentType.isEmpty
+                      ? null
+                      : doc.documentType,
+                  items: allowedDocTypes
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() {
+                      doc.documentType = v ?? '';
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                _fieldLabel('Document No'),
+                TextField(
+                  onChanged: (v) => onDocNoInput(i, v),
+                  decoration: const InputDecoration(
+                    hintText: 'Enter document number',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _fieldLabel('Expiry Date'),
+                TextField(
+                  readOnly: true,
+                  controller: TextEditingController(text: doc.expiryDate),
+                  onTap: () => _pickDateForDoc(i),
+                  decoration: const InputDecoration(hintText: 'YYYY-MM-DD'),
+                ),
+              ] else ...[
+                _roField('Document Type', doc.documentType),
+                const SizedBox(height: 8),
+                _roField('Document No', doc.documentNo),
+                const SizedBox(height: 8),
+                _roField('Expiry Date', formatDateDDMMYYYY(doc.expiryDate)),
+              ],
               const SizedBox(height: 8),
               _roField(
                 'File',
@@ -578,7 +992,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextButton.icon(
-          onPressed: togglePassHistory,
+          onPressed: _toggleHistory,
           icon: Icon(showPassHistory ? Icons.visibility_off : Icons.history),
           label: Text(showPassHistory ? 'Hide History' : 'Show History'),
         ),
@@ -639,6 +1053,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
     Column(
       children: [
         TextField(
+          controller: _reviewRemarkController,
           onChanged: (v) => reviewRemark = v,
           maxLines: 4,
           decoration: const InputDecoration(hintText: 'Enter remark'),
@@ -663,7 +1078,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Save',
           Icons.save,
-          savePass,
+          _save,
           bg: const Color(0xFF1D4ED8),
           fg: Colors.white,
         ),
@@ -671,7 +1086,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Submit',
           Icons.send,
-          onSubmit,
+          _submit,
           bg: const Color(0xFF15803D),
           fg: Colors.white,
         ),
@@ -679,7 +1094,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Send Modification',
           Icons.edit,
-          sendForModify,
+          _modify,
           bg: const Color(0xFFF59E0B),
           fg: Colors.white,
         ),
@@ -687,7 +1102,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Send Modification',
           Icons.edit,
-          sendForModify,
+          _modify,
           bg: const Color(0xFFF59E0B),
           fg: Colors.white,
         ),
@@ -695,7 +1110,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Reject',
           Icons.cancel,
-          rejectPass,
+          _reject,
           bg: const Color(0xFFDC2626),
           fg: Colors.white,
         ),
@@ -703,7 +1118,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Approve',
           Icons.check_circle,
-          approvePass,
+          _approve,
           bg: const Color(0xFF15803D),
           fg: Colors.white,
         ),
@@ -711,7 +1126,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Reject',
           Icons.cancel,
-          rejectPass,
+          _reject,
           bg: const Color(0xFFDC2626),
           fg: Colors.white,
         ),
@@ -719,7 +1134,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
         _actionButton(
           'Confirm & Send Approver',
           Icons.check_circle,
-          confirmPass,
+          _confirmPass,
           bg: const Color(0xFF15803D),
           fg: Colors.white,
         ),
@@ -743,7 +1158,7 @@ class _PassEntryPageState extends State<PassEntryPage> {
   }) => SizedBox(
     width: double.infinity,
     child: ElevatedButton.icon(
-      onPressed: onTap,
+      onPressed: isSaving ? null : onTap,
       icon: Icon(icon),
       label: Text(label),
       style: ElevatedButton.styleFrom(
@@ -789,6 +1204,10 @@ class _PassEntryPageState extends State<PassEntryPage> {
               ],
               const SizedBox(height: 12),
               _actionsSection(),
+              if (isSaving) ...[
+                const SizedBox(height: 12),
+                const Center(child: CircularProgressIndicator()),
+              ],
               if (saveSuccess.isNotEmpty)
                 messageBox(saveSuccess, success: true),
               if (saveError.isNotEmpty) messageBox(saveError, success: false),
@@ -845,4 +1264,10 @@ class _PassEntryPageState extends State<PassEntryPage> {
       ],
     ),
   );
+
+  void goBackToPasses() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+  }
 }

@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/heg_app_bar.dart';
+import 'pass_entry/pass_entry_page.dart';
+import '../data/pass_registry_api.dart';
+import '../models/pass_registry_item.dart';
 
 class PassDocument {
   final int? documentId;
@@ -34,10 +37,21 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   final TextEditingController _brandController = TextEditingController();
   final TextEditingController _ecController = TextEditingController();
 
+  final PassRegistryApi _api = PassRegistryApi();
+  Timer? _pollTimer;
+  List<PassRegistryItem> _rows = [];
+  List<PassRegistryItem> _filteredRows = [];
+
   bool _loading = false;
   bool _isReadOnly = false;
   bool _showHistory = false;
   bool _isDownloading = false;
+  bool _listLoading = true;
+
+  String _query = '';
+  String _statusFilter = 'All';
+  String _empTypeFilter = 'All';
+  String _vehicleTypeFilter = 'All';
 
   String _saveError = '';
   String _saveSuccess = '';
@@ -95,14 +109,54 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     _vehicleController.text = _vehicleNo;
     _brandController.text = _brandModel;
     _ecController.text = _ecNo;
+    _loadRegistry();
+    _startPolling();
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _vehicleController.dispose();
     _brandController.dispose();
     _ecController.dispose();
     super.dispose();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      _loadRegistry(silent: true);
+    });
+  }
+
+  Future<void> _loadRegistry({bool silent = false}) async {
+    if (!silent) setState(() => _listLoading = true);
+    try {
+      final data = await _api.fetchPassRegistry();
+      _rows = data;
+      _applyFilters();
+    } catch (_) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to load vehicle registry')),
+        );
+      }
+    } finally {
+      if (!silent && mounted) setState(() => _listLoading = false);
+    }
+  }
+
+  void _applyFilters() {
+    final q = _query.trim().toLowerCase();
+    _filteredRows = _rows.where((r) {
+      final searchOk = q.isEmpty || r.matchesSearch(q);
+      final statusOk = r.matchesStatus(_statusFilter);
+      final empOk = r.matchesEmpType(_empTypeFilter);
+      final vehicleOk = r.matchesVehicleType(_vehicleTypeFilter);
+      return searchOk && statusOk && empOk && vehicleOk;
+    }).toList();
+    setState(() {});
   }
 
   bool get _canEdit {
@@ -176,7 +230,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
 
   Future<void> _downloadDocument(PassDocument doc) async {
     if (doc.documentId == null) return;
-
     setState(() => _isDownloading = true);
     try {
       final client = http.Client();
@@ -186,12 +239,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
         ),
         headers: const {'x-api-key': 'VPMS_SECRET_KEY_2026'},
       );
-
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final Uint8List bytes = res.bodyBytes;
-        if (bytes.isEmpty) {
-          throw Exception('Empty file');
-        }
+        if (bytes.isEmpty) throw Exception('Empty file');
       } else {
         throw Exception('Download failed');
       }
@@ -232,8 +282,13 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   void _reject() => setState(() => _status = 'REJECT');
   void _modify() => setState(() => _status = 'MODIFY');
 
-  void _toggleHistory() {
-    setState(() => _showHistory = !_showHistory);
+  void _toggleHistory() => setState(() => _showHistory = !_showHistory);
+
+  void _openAddPass() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PassEntryPage()),
+    );
   }
 
   Widget _fieldLabel(String label) => Padding(
@@ -303,6 +358,108 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       ],
     ),
   );
+
+  Widget _chip(String label, String current, ValueChanged<String> onTap) {
+    final selected = current.toUpperCase() == label.toUpperCase();
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(label),
+    );
+  }
+
+  Widget _registryListSection() {
+    return _section(
+      'Vehicle Registry',
+      Column(
+        children: [
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Search pass no, vehicle no, employee, contractor...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (v) {
+              _query = v;
+              _applyFilters();
+            },
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _chip('All', _statusFilter, (v) {
+                _statusFilter = v;
+                _applyFilters();
+              }),
+              _chip('Active', _statusFilter, (v) {
+                _statusFilter = v;
+                _applyFilters();
+              }),
+              _chip('Needs_Modification', _statusFilter, (v) {
+                _statusFilter = v;
+                _applyFilters();
+              }),
+              _chip('Reject', _statusFilter, (v) {
+                _statusFilter = v;
+                _applyFilters();
+              }),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_listLoading)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_filteredRows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No pass records found'),
+            )
+          else
+            ..._filteredRows.map(
+              (item) => Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFD9E2EC)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.vehicleNo,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        Text(
+                          item.status,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Pass No: ${item.passNo}'),
+                    Text('Employee: ${item.name} (${item.empType})'),
+                    Text('Gate: ${item.gateNo}'),
+                    Text('Valid: ${item.validityDate}'),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _vehicleSection() => Column(
     children: [
@@ -398,7 +555,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       const SizedBox(height: 10),
       Row(
         children: [
-          Expanded(child: _roField('Contractor Code', _contractorCode ?? '')),
+          Expanded(child: _roField('Contractor Code', _contractorCode)),
           const SizedBox(width: 8),
           Expanded(child: _roField('Contractor Name', _contractorName)),
         ],
@@ -624,11 +781,41 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     ),
   );
 
+  Widget _toast(String text, bool success) => Container(
+    margin: const EdgeInsets.only(top: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: success ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: success ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5),
+      ),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          success ? Icons.check_circle : Icons.error_outline,
+          color: success ? const Color(0xFF15803D) : const Color(0xFFDC2626),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text)),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
       appBar: const HegAppBar(title: 'Pass Entry'),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddPass,
+        backgroundColor: const Color(0xFF0EA5A4),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Pass'),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
@@ -637,6 +824,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             children: [
               _headerCard(),
               const SizedBox(height: 12),
+              _registryListSection(),
               _section('Vehicle Details', _vehicleSection()),
               _section('Employee / Contractor Details', _employeeSection()),
               _section('Pass Details', _passSection()),
@@ -695,28 +883,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             ],
           ),
         ),
-      ],
-    ),
-  );
-
-  Widget _toast(String text, bool success) => Container(
-    margin: const EdgeInsets.only(top: 12),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: success ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: success ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5),
-      ),
-    ),
-    child: Row(
-      children: [
-        Icon(
-          success ? Icons.check_circle : Icons.error_outline,
-          color: success ? const Color(0xFF15803D) : const Color(0xFFDC2626),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text)),
       ],
     ),
   );
