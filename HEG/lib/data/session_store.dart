@@ -7,6 +7,7 @@ class SessionUser {
   final String department;
   final String designation;
   final String category;
+  final String role; 
 
   const SessionUser({
     required this.name,
@@ -14,6 +15,7 @@ class SessionUser {
     required this.department,
     required this.designation,
     required this.category,
+    this.role = 'EMPLOYEE',
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +24,7 @@ class SessionUser {
     'department': department,
     'designation': designation,
     'category': category,
+    'role': role,
   };
 
   static SessionUser fromJson(Map<String, dynamic> j) => SessionUser(
@@ -30,6 +33,7 @@ class SessionUser {
     department: (j['department'] ?? '').toString(),
     designation: (j['designation'] ?? '').toString(),
     category: (j['category'] ?? '').toString(),
+    role: (j['role'] ?? 'EMPLOYEE').toString(), //
   );
 }
 

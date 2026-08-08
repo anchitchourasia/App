@@ -1,26 +1,25 @@
+// lib/screens/approver/approver_pending_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../data/session_store.dart';
+import '../../data/pass_registry_api.dart';
+import '../../models/pass_registry_item.dart';
+import '../../widgets/heg_app_bar.dart';
+import '../../pass_entry/pass_entry_page.dart'; // ← THIS is correct
 
-import '../data/pass_registry_api.dart';
-import '../models/pass_registry_item.dart';
-import '../widgets/heg_app_bar.dart';
-import 'pass_entry/pass_entry_page.dart';
-import 'vpms/pass_sticker/pass_sticker_page.dart';
-import '../data/session_store.dart';
-
-class VehicleTrackingPage extends StatefulWidget {
-  const VehicleTrackingPage({super.key});
+class ApproverPendingPage extends StatefulWidget {
+  const ApproverPendingPage({super.key});
 
   @override
-  State<VehicleTrackingPage> createState() => _VehicleTrackingPageState();
+  State<ApproverPendingPage> createState() => _ApproverPendingPageState();
 }
 
-class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
+class _ApproverPendingPageState extends State<ApproverPendingPage> {
   final PassRegistryApi api = PassRegistryApi();
   final TextEditingController searchController = TextEditingController();
 
   List<PassRegistryItem> allPasses = [];
-  List<PassRegistryItem> filteredPasses = [];
+  List<PassRegistryItem> pendingPasses = [];
 
   bool loading = true;
   bool hasError = false;
@@ -30,9 +29,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   DateTime? lastUpdated;
 
   String searchText = '';
-  String filterStatus = 'ALL';
-  String filterEmpType = 'ALL';
-  String filterVehicleType = 'ALL';
 
   int currentPage = 1;
   int pageSize = 10;
@@ -85,6 +81,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
       if (!mounted) return;
       setState(() {
         allPasses = rows;
+        // Filter only SUBMITTED or CONFIRMED passes (pending for approver)
+        pendingPasses = rows.where((row) {
+          final status = row.status.trim().toUpperCase();
+          return status == 'SUBMITTED' || status == 'CONFIRMED';
+        }).toList();
         lastUpdated = DateTime.now();
         applyFilters();
       });
@@ -105,75 +106,32 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   }
 
   void applyFilters() {
-    filteredPasses = allPasses.where((row) {
-      return row.matchesSearch(searchText) &&
-          row.matchesStatus(filterStatus) &&
-          row.matchesEmpType(filterEmpType) &&
-          row.matchesVehicleType(filterVehicleType);
+    pendingPasses = pendingPasses.where((row) {
+      return row.matchesSearch(searchText);
     }).toList();
 
-    final totalPages = (filteredPasses.length / pageSize).ceil();
+    final totalPages = (pendingPasses.length / pageSize).ceil();
     if (currentPage > totalPages) currentPage = totalPages;
   }
 
   List<PassRegistryItem> get pagedPasses {
     final start = (currentPage - 1) * pageSize;
     final end = start + pageSize;
-    if (start >= filteredPasses.length) return [];
-    return filteredPasses.sublist(
+    if (start >= pendingPasses.length) return [];
+    return pendingPasses.sublist(
       start,
-      end > filteredPasses.length ? filteredPasses.length : end,
+      end > pendingPasses.length ? pendingPasses.length : end,
     );
   }
 
   int get totalPages {
-    final total = (filteredPasses.length / pageSize).ceil();
+    final total = (pendingPasses.length / pageSize).ceil();
     return total == 0 ? 1 : total;
   }
-
-  int get activeCount =>
-      allPasses.where((e) => e.status.trim().toUpperCase() == 'ACTIVE').length;
-
-  int get draftCount => allPasses.where((e) {
-    final s = e.status.trim().toUpperCase();
-    return s == 'DRAFT' || s == 'SAVED';
-  }).length;
-
-  int get rejectCount => allPasses.where((e) {
-    final s = e.status.trim().toUpperCase();
-    return s == 'REJECT' || s == 'REJECTED' || s == 'REGRET';
-  }).length;
 
   void onSearch(String value) {
     setState(() {
       searchText = value;
-      currentPage = 1;
-      applyFilters();
-    });
-  }
-
-  void onStatusChange(String? value) {
-    if (value == null) return;
-    setState(() {
-      filterStatus = value;
-      currentPage = 1;
-      applyFilters();
-    });
-  }
-
-  void onEmpTypeChange(String? value) {
-    if (value == null) return;
-    setState(() {
-      filterEmpType = value;
-      currentPage = 1;
-      applyFilters();
-    });
-  }
-
-  void onVehicleTypeChange(String? value) {
-    if (value == null) return;
-    setState(() {
-      filterVehicleType = value;
       currentPage = 1;
       applyFilters();
     });
@@ -197,99 +155,25 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     }
   }
 
-  Color statusColor(String status) {
-    switch (status.trim().toUpperCase()) {
-      case 'DRAFT':
-      case 'SAVED':
-        return const Color(0xFF2563EB);
-      case 'SUBMITTED':
-        return const Color(0xFFD97706);
-      case 'CONFIRMED':
-        return const Color(0xFF0891B2);
-      case 'ACTIVE':
-      case 'APPROVED':
-        return const Color(0xFF15803D);
-      case 'NEEDSMODIFICATION':
-      case 'NEEDS_MODIFICATION':
-      case 'MODIFY':
-        return const Color(0xFFB45309);
-      case 'REJECT':
-      case 'REJECTED':
-      case 'REGRET':
-        return const Color(0xFFDC2626);
-      default:
-        return const Color(0xFF6B7280);
-    }
-  }
-
-  void _openAddPassForm() async {
+  void reviewPass(PassRegistryItem row) async {
     await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const PassEntryPage(),
-    );
-    loadPasses();
-  }
-
-  void viewPass(PassRegistryItem row) {
-    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => PassEntryPage(
         registryId: row.passId,
-        isViewMode:
-            true, // Opens the exact same Pass Entry form in read-only view mode
-      ),
-    );
-  }
-
-  void printSticker(PassRegistryItem row) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => PassStickerPage(passId: row.passId)),
-    );
-  }
-
-  void editPass(PassRegistryItem row) async {
-    // Prevent Approvers from editing
-    if (SessionStore.currentUser?.role == 'APPROVER') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Approvers cannot edit passes'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PassEntryPage(
-        registryId: row.passId, // id from backend
         isViewMode: false,
-        isApproverMode: false,
+        isApproverMode: true, // approver review mode
       ),
     );
-    loadPasses();
+    await loadPasses(silent: true);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const HegAppBar(title: 'Pass Registry'),
-      floatingActionButton: SessionStore.currentUser?.role == 'APPROVER'
-          ? null
-          : FloatingActionButton(
-              onPressed: _openAddPassForm,
-              backgroundColor: accentTeal,
-              child: const Icon(Icons.add),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      appBar: const HegAppBar(title: 'Pending for Approver'),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -344,7 +228,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Vehicle Pass Registry',
+            'Pending for Approval',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -353,7 +237,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Read-only registry view with search and filters',
+            'Passes awaiting approver review',
             style: TextStyle(
               color: Colors.white.withAlpha(185),
               fontSize: 12,
@@ -364,14 +248,12 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           Row(
             children: [
               Expanded(
-                child: _summaryStat('Total', allPasses.length.toString()),
+                child: _summaryStat('Total', pendingPasses.length.toString()),
               ),
               const SizedBox(width: 8),
-              Expanded(child: _summaryStat('Active', activeCount.toString())),
-              const SizedBox(width: 8),
-              Expanded(child: _summaryStat('Draft', draftCount.toString())),
-              const SizedBox(width: 8),
-              Expanded(child: _summaryStat('Reject', rejectCount.toString())),
+              Expanded(
+                child: _summaryStat('Page', '$currentPage of $totalPages'),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -392,15 +274,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                   color: Colors.white.withAlpha(190),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'Page $currentPage of $totalPages',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(190),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -457,139 +330,40 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
         ],
       ),
       padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          TextField(
-            controller: searchController,
-            onChanged: onSearch,
-            style: const TextStyle(
-              color: textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              prefixIcon: const Icon(
-                Icons.search,
-                size: 20,
-                color: textSecondary,
-              ),
-              hintText: 'Search pass no, vehicle no, employee, contractor',
-              hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 14,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: panelBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: accentTeal, width: 1.2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildDropdown('Status', filterStatus, [
-                  'ALL',
-                  'ACTIVE',
-                  'DRAFT',
-                  'SUBMITTED',
-                  'REJECT',
-                  'NEEDSMODIFICATION',
-                ], onStatusChange),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildDropdown('Emp Type', filterEmpType, [
-                  'ALL',
-                  'Company_Employee',
-                  'Contractor',
-                ], onEmpTypeChange),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildDropdown('Vehicle Type', filterVehicleType, [
-            'ALL',
-            'LMV',
-            'HMV',
-            'Heavy Machinery',
-          ], onVehicleTypeChange),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdown(
-    String label,
-    String value,
-    List<String> items,
-    void Function(String?) onChanged,
-  ) {
-    return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : items.first,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(
-          color: textSecondary,
-          fontSize: 12,
+      child: TextField(
+        controller: searchController,
+        onChanged: onSearch,
+        style: const TextStyle(
+          color: textPrimary,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
         ),
-        filled: true,
-        fillColor: const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: panelBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: accentTeal, width: 1.2),
+        decoration: InputDecoration(
+          isDense: true,
+          prefixIcon: const Icon(Icons.search, size: 20, color: textSecondary),
+          hintText: 'Search pass id, employee, contractor, vehicle...',
+          hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 14,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: panelBorder),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: accentTeal, width: 1.2),
+          ),
         ),
       ),
-      items: items
-          .map(
-            (e) => DropdownMenuItem(
-              value: e,
-              child: Text(e, overflow: TextOverflow.ellipsis),
-            ),
-          )
-          .toList(),
-      onChanged: onChanged,
     );
   }
 
   Widget _buildPassCard(PassRegistryItem row) {
-    final badgeColor = statusColor(row.status);
-    final isApprover =
-        SessionStore.currentUser?.role == 'APPROVER'; // ← ADDED THIS APPROVER
-
-    // 1. Clean status string
-    final statusUpper = row.status.trim().toUpperCase();
-
-    // 2. Sticker button shows ONLY when ACTIVE or APPROVED
-    final showSticker = statusUpper == 'ACTIVE' || statusUpper == 'APPROVED';
-
-    // 3. Edit button shows ONLY for Draft / Modification states
-    // (Explicitly excluded for ACTIVE, APPROVED, and SUBMITTED)
-    // NOTE: Approver check is done in the Wrap children below
-    final showEdit =
-        statusUpper == 'DRAFT' ||
-        statusUpper == 'SAVED' ||
-        statusUpper == 'MODIFY' ||
-        statusUpper == 'NEEDS_MODIFICATION' ||
-        statusUpper == 'NEEDSMODIFICATION';
+    final badgeColor = const Color(0xFFD97706); // Warning color for pending
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -669,7 +443,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                     border: Border.all(color: badgeColor.withAlpha(40)),
                   ),
                   child: Text(
-                    row.status.isEmpty ? 'UNKNOWN' : row.status,
+                    row.status.isEmpty ? 'PENDING' : row.status,
                     style: TextStyle(
                       color: badgeColor,
                       fontSize: 11,
@@ -708,37 +482,18 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Action Buttons
             // Action Buttons
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 _actionButton(
-                  label: 'View',
+                  label: 'Review',
                   icon: Icons.visibility_outlined,
                   foreground: accentDark,
                   background: const Color(0xFFEAF2FF),
-                  onTap: () => viewPass(row),
+                  onTap: () => reviewPass(row),
                 ),
-                if (showSticker)
-                  _actionButton(
-                    label: 'Sticker',
-                    icon: Icons.print_outlined,
-                    foreground: const Color(0xFF334155),
-                    background: const Color(0xFFF1F5F9),
-                    onTap: () => printSticker(row),
-                  ),
-                // Edit button: ONLY show if NOT approver AND status allows editing
-                if (!isApprover && showEdit)
-                  _actionButton(
-                    label: 'Edit',
-                    icon: Icons.edit_outlined,
-                    foreground: accentDark,
-                    background: const Color(0xFFEAF2FF),
-                    onTap: () => editPass(row),
-                  ),
               ],
             ),
           ],
@@ -1054,7 +809,7 @@ class EmptyState extends StatelessWidget {
           Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
           SizedBox(height: 10),
           Text(
-            'No pass records found',
+            'No pending passes',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -1063,7 +818,7 @@ class EmptyState extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'Try changing search text or filter values.',
+            'All passes have been reviewed.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Color(0xFF627D98),
@@ -1076,3 +831,5 @@ class EmptyState extends StatelessWidget {
     );
   }
 }
+
+// ... rest of the code remains the same ...

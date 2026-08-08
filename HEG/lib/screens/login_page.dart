@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../data/session_store.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../core/api_config.dart'; // ← if not already imported
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -32,10 +35,12 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _loading = true);
 
-    // Demo authentication (replace later with DB/API)
-    await Future.delayed(const Duration(milliseconds: 700));
     final u = _userController.text.trim();
-    final p = _passController.text;
+    final p = _passController.text.trim();
+
+    // ════════════════════════════════════════════════════════════
+    // KEEP EXISTING DEMO LOGINS (for offline testing)
+    // ════════════════════════════════════════════════════════════
 
     // ADMIN LOGIN
     if (u == 'admin' && p == '123456') {
@@ -45,9 +50,9 @@ class _LoginPageState extends State<LoginPage> {
         department: 'ADMIN',
         designation: 'Administrator',
         category: 'Admin',
+        role: 'APPROVER', // ← ADD THIS
       );
 
-      // ✅ persist session to disk (remember login) [web:3356]
       await SessionStore.saveLogin(userId: 'admin', admin: true, user: user);
 
       if (!mounted) return;
@@ -63,6 +68,7 @@ class _LoginPageState extends State<LoginPage> {
         department: 'IT 163',
         designation: 'Manager',
         category: 'Executive',
+        role: 'EMPLOYEE', // ← ADD THIS
       );
 
       await SessionStore.saveLogin(userId: 'admin1', admin: false, user: user);
@@ -80,6 +86,7 @@ class _LoginPageState extends State<LoginPage> {
         department: 'IT 163',
         designation: 'Senior Manager',
         category: 'Executive',
+        role: 'EMPLOYEE', // ← ADD THIS
       );
 
       await SessionStore.saveLogin(userId: 'admin2', admin: false, user: user);
@@ -89,18 +96,108 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    // INVALID
-    await SessionStore.logout(); // ✅ clear persisted session [web:3344]
+    // ════════════════════════════════════════════════════════════
+    // CALL WEB API LOGIN (same as web UI)
+    // ════════════════════════════════════════════════════════════
 
-    if (!mounted) return;
-    setState(() => _loading = false);
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/api/authority/login'),
+            headers: {
+              'x-api-key': ApiConfig.apiKey,
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'empNo': u, 'password': p}),
+          )
+          .timeout(const Duration(milliseconds: 12000));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Invalid username or password'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map;
+
+        // Extract role from response (same as web)
+        final roleStr = (data['role'] ?? 'UPLOADER')
+            .toString()
+            .toUpperCase()
+            .trim();
+        final empCodeStr = (data['empNo'] ?? u).toString().trim();
+
+        // Map web role to mobile session
+        String mappedRole;
+        String mappedCategory;
+
+        if (roleStr == 'APPROVER' || roleStr == 'ADMIN') {
+          mappedRole = 'APPROVER';
+          mappedCategory = 'Authority';
+        } else if (roleStr == 'CONFIRMER') {
+          mappedRole = 'CONFIRMER';
+          mappedCategory = 'Authority';
+        } else if (roleStr == 'UPLOADER') {
+          mappedRole = 'UPLOADER';
+          mappedCategory = 'Authority';
+        } else {
+          mappedRole = 'EMPLOYEE';
+          mappedCategory = 'Company_Employee';
+        }
+
+        final user = SessionUser(
+          name: empCodeStr,
+          ec: empCodeStr,
+          department: '',
+          designation: mappedRole,
+          category: mappedCategory,
+          role: mappedRole, // ← store role
+        );
+
+        await SessionStore.saveLogin(
+          userId: empCodeStr,
+          admin: mappedRole == 'APPROVER',
+          user: user,
+        );
+
+        if (!mounted) return;
+        Navigator.pushReplacementNamed(context, '/home');
+      } else if (response.statusCode == 401) {
+        if (!mounted) return;
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid Employee Code or Password'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (response.statusCode == 404) {
+        if (!mounted) return;
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Employee Code "$u" not found'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login failed. Try again.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server. Check network.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override

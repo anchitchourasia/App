@@ -5,6 +5,7 @@ import '../widgets/notification_bell.dart';
 import '../widgets/chat_bubble_button.dart';
 import '../data/session_store.dart';
 import '../data/notification_store.dart';
+import '../screens/approver/approver_pending_page.dart'; // ← ADD THIS IMPORT
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -87,6 +88,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
+  // ← ADD THIS METHOD
+  void _onVehicleTrackingTap() {
+    final userRole = SessionStore.currentUser?.role;
+
+    if (userRole == 'APPROVER') {
+      // Approvers see ONLY pending passes
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ApproverPendingPage()),
+      );
+    } else {
+      // Employees/Contractors see full registry
+      Navigator.pushNamed(context, '/vehicleTracking');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // ✅ Current session user
@@ -157,21 +174,54 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 16),
                 Expanded(
-                  child: GridView.builder(
-                    itemCount: HomePage._items.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.95,
-                        ),
-                    itemBuilder: (context, index) {
-                      final item = HomePage._items[index];
-                      return _MenuCard(
-                        title: item.title,
-                        icon: item.icon,
-                        onTap: () => Navigator.pushNamed(context, item.route),
+                  child: Builder(
+                    builder: (context) {
+                      final isApprover =
+                          SessionStore.currentUser?.role == 'APPROVER';
+
+                      // Base menu items
+                      final items = List<_MenuItem>.from(HomePage._items);
+
+                      // Add extra tile for approver queue
+                      if (isApprover) {
+                        items.insert(
+                          0,
+                          const _MenuItem(
+                            'Pending for Approver',
+                            Icons.shield_moon, // any icon you like
+                            '/approverPending',
+                          ),
+                        );
+                      }
+
+                      return GridView.builder(
+                        itemCount: items.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 0.95,
+                            ),
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          return _MenuCard(
+                            title: item.title,
+                            icon: item.icon,
+                            onTap: () {
+                              if (item.route == '/approverPending') {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ApproverPendingPage(),
+                                  ),
+                                );
+                              } else {
+                                Navigator.pushNamed(context, item.route);
+                              }
+                            },
+                          );
+                        },
                       );
                     },
                   ),
