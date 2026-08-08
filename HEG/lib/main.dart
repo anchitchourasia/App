@@ -20,6 +20,9 @@ import 'screens/self_service_portal_page.dart';
 import 'screens/overtime_management_page.dart';
 import 'screens/manpower_dashboard_page.dart';
 import 'screens/notifications_page.dart';
+import 'data/session_store.dart';
+import 'screens/vehicle_tracking_page.dart';
+import 'screens/approver/approver_menu_page.dart';
 
 // ✅ NEW: Applicants page
 import 'screens/applicants_page.dart';
@@ -63,7 +66,13 @@ class MyApp extends StatelessWidget {
 
         '/insuranceUpload': (_) => InsuranceUploadPage(),
         '/leaveApply': (_) => LeaveApplyPage(),
-        '/vehicleTracking': (_) => VehicleTrackingPage(),
+        '/vehicleTracking': (context) {
+          final role = SessionStore.currentUser?.role;
+          if (role == 'APPROVER') {
+            return const ApproverVehicleMenuPage();
+          }
+          return const VehicleTrackingPage();
+        },
         '/selfServicePortal': (_) => SelfServicePortalPage(),
         '/overtimeManagement': (_) => OvertimeManagementPage(),
         '/manpowerDashboard': (_) => ManpowerDashboardPage(),

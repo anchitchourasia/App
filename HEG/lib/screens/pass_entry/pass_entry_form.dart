@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:http_parser/http_parser.dart';
 
 import 'pass_entry_models.dart';
 import 'pass_entry_widgets.dart';
 import '/core/api_config.dart';
-import 'package:http_parser/http_parser.dart';
 
 class PassEntryForm extends StatefulWidget {
   final int? registryId;
@@ -81,13 +81,14 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String? _saveSuccess;
   String? _saveError;
 
-  bool get _isReadOnly => widget.isViewMode;
+  // ── Approver workflow state ─────────────────────────────────────
+  final TextEditingController _remarkCtrl = TextEditingController();
+  bool _isWorkflowSubmitting = false;
+  String? _workflowError;
+  String? _workflowSuccess;
 
-  // ── Pass History ───────────────────────────────────────────────
-  bool _showHistory = false;
-  bool _loadingHistory = false;
-  String? _historyError;
-  List<PassHistoryItem> _history = [];
+  bool get _isReadOnly =>
+      widget.isViewMode || !_canEdit; // respect canEdit logic for creator
 
   // ── Constants ──────────────────────────────────────────────────
   static const _vehicleTypes = [
@@ -110,8 +111,26 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String get _passSaveUrl => ApiConfig.passSave;
   String get _passUpdateUrl => ApiConfig.passUpdate;
   String get _passListUrl => ApiConfig.passList;
+  String get _passStatusUpdateUrl => ApiConfig.passStatusUpdate;
   String get _apiKey => ApiConfig.apiKey;
-  String get _passHistoryUrl => ApiConfig.passHistory;
+
+  // ── Role-based guards (mirroring web canEdit/canApprove) ───────
+  bool get _canEdit {
+    if (widget.isViewMode || widget.isApproverMode) {
+      return false;
+    }
+    final s = _status.trim().toUpperCase();
+    return s == 'DRAFT' ||
+        s == 'SAVED' ||
+        s == 'MODIFY' ||
+        s == 'NEEDS_MODIFICATION' ||
+        s == 'NEEDSMODIFICATION';
+  }
+
+  bool get _canApprove {
+    final s = _status.trim().toUpperCase();
+    return widget.isApproverMode && (s == 'SUBMITTED' || s == 'CONFIRMED');
+  }
 
   // ── Lifecycle ───────────────────────────────────────────────────
   @override
@@ -135,6 +154,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     _brandModelCtrl.dispose();
     _passNoCtrl.dispose();
     _ecNoCtrl.dispose();
+    _remarkCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -146,7 +166,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   // ════════════════════════════════════════════════════════════════
   // EMPLOYEE LOOKUP
   // ════════════════════════════════════════════════════════════════
-  Future<void> _loadEmployee() async {
+  Future _loadEmployee() async {
     setState(() {
       _empFetchError = null;
       _fetchingEmployee = true;
@@ -167,7 +187,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
           .timeout(const Duration(milliseconds: 12000));
 
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final data = jsonDecode(res.body) as Map;
 
         final apiType = (data['empType'] ?? '').toString().trim().toUpperCase();
         if (apiType != _empType.trim().toUpperCase()) {
@@ -220,7 +240,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   // ════════════════════════════════════════════════════════════════
   // PASS LOAD
   // ════════════════════════════════════════════════════════════════
-  Future<void> _loadPass(int id) async {
+  Future _loadPass(int id) async {
     setState(() {
       _isSaving = true;
       _saveError = null;
@@ -232,14 +252,14 @@ class _PassEntryFormState extends State<PassEntryForm> {
           .timeout(const Duration(milliseconds: 12000));
 
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final data = jsonDecode(res.body) as Map;
 
         setState(() {
           _vehicleNoCtrl.text = (data['vehicleNo'] ?? '').toString();
           _vehicleType = (data['vehicleType'] ?? '').toString();
           _brandModelCtrl.text = (data['brandModel'] ?? '').toString();
           _passNoCtrl.text = (data['passNo'] ?? '')
-              .toString(); // ✅ Set pass number to controller
+              .toString(); // Set pass number to controller
           _ecNoCtrl.text = (data['employeeNo'] ?? '').toString();
           _empType = (data['empType'] ?? '').toString();
           _gateNo = (data['gateNo'] ?? '').toString();
@@ -248,23 +268,21 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _passNo = data['passNo'] as int?;
           _enterBy = (data['enterBy'] ?? '').toString();
 
-          final docsJson = data['documents'] as List<dynamic>?;
+          final docsJson = data['documents'] as List?;
           if (docsJson != null && docsJson.isNotEmpty) {
             _documents.clear();
             _documents.addAll(
-              docsJson
-                  .map(
-                    (d) => PassDocumentModel(
-                      documentId: d['documentId'] as int?,
-                      documentType: (d['documentType'] ?? '').toString(),
-                      documentNo: (d['documentNo'] ?? '').toString(),
-                      expiryDate: (d['expiryDate'] ?? '').toString(),
-                      fileKey: (d['fileKey'] ?? '').toString(),
-                      fileName: (d['fileName'] ?? '').toString(),
-                      filePath: null,
-                    ),
-                  )
-                  .toList(),
+              docsJson.map(
+                (d) => PassDocumentModel(
+                  documentId: d['documentId'] as int?,
+                  documentType: (d['documentType'] ?? '').toString(),
+                  documentNo: (d['documentNo'] ?? '').toString(),
+                  expiryDate: (d['expiryDate'] ?? '').toString(),
+                  fileKey: (d['fileKey'] ?? '').toString(),
+                  fileName: (d['fileName'] ?? '').toString(),
+                  filePath: null,
+                ),
+              ),
             );
           }
 
@@ -412,9 +430,8 @@ class _PassEntryFormState extends State<PassEntryForm> {
   // ════════════════════════════════════════════════════════════════
   // SAVE / SUBMIT
   // ════════════════════════════════════════════════════════════════
-  Future<void> _savePass({bool submit = false}) async {
+  Future _savePass({bool submit = false}) async {
     if (!_validateForm(isSubmit: submit)) {
-      // <--- Pass submit flag here
       setState(() {});
       return;
     }
@@ -509,7 +526,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
       final response = await _sendMultipart();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map;
         setState(() {
           _registryId ??= data['id'] as int?;
           _passNo = data['passNo'] as int?;
@@ -561,6 +578,69 @@ class _PassEntryFormState extends State<PassEntryForm> {
       }
     });
   }
+
+  // ════════════════════════════════════════════════════════════════
+  // WORKFLOW STATUS UPDATE (APPROVER)
+  // ════════════════════════════════════════════════════════════════
+  Future<void> _updatePassStatus({required String newStatus}) async {
+    if (_registryId == null) {
+      setState(() => _workflowError = 'No pass loaded.');
+      return;
+    }
+
+    if (_remarkCtrl.text.trim().isEmpty) {
+      setState(() => _workflowError = 'Remark is required.');
+      return;
+    }
+
+    setState(() {
+      _isWorkflowSubmitting = true;
+      _workflowError = null;
+      _workflowSuccess = null;
+    });
+
+    final payload = {
+      'status': newStatus,
+      'remark': _remarkCtrl.text.trim(),
+      'enterBy': _enterBy.isNotEmpty ? _enterBy : 'SYSTEM',
+    };
+
+    try {
+      final res = await http
+          .put(
+            Uri.parse('$_passStatusUpdateUrl/$_registryId'),
+            headers: {'x-api-key': _apiKey, 'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(milliseconds: 12000));
+
+      if (res.statusCode == 200) {
+        setState(() {
+          _status = newStatus;
+          _workflowSuccess = '$newStatus completed successfully.';
+          _isWorkflowSubmitting = false;
+        });
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) Navigator.pop(context);
+        });
+      } else {
+        setState(() {
+          _workflowError = 'Status update failed: HTTP ${res.statusCode}';
+          _isWorkflowSubmitting = false;
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _workflowError = 'Status update failed: Network error';
+        _isWorkflowSubmitting = false;
+      });
+    }
+  }
+
+  Future<void> _approvePass() => _updatePassStatus(newStatus: 'ACTIVE');
+  Future<void> _rejectPass() => _updatePassStatus(newStatus: 'REJECT');
+  Future<void> _sendForModify() =>
+      _updatePassStatus(newStatus: 'NEEDS_MODIFICATION');
 
   // ════════════════════════════════════════════════════════════════
   // DOCUMENT HELPERS
@@ -619,7 +699,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     });
   }
 
-  Future<void> _pickFileForDoc(int index) async {
+  Future _pickFileForDoc(int index) async {
     if (_isReadOnly) return;
 
     final result = await FilePicker.platform.pickFiles(
@@ -651,58 +731,6 @@ class _PassEntryFormState extends State<PassEntryForm> {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // toggleHistory
-  // ════════════════════════════════════════════════════════════════
-
-  void _toggleHistory() {
-    setState(() {
-      _showHistory = !_showHistory;
-    });
-
-    if (_showHistory && _registryId != null && _history.isEmpty) {
-      _loadHistory(_registryId!);
-    }
-  }
-
-  Future<void> _loadHistory(int passId) async {
-    setState(() {
-      _loadingHistory = true;
-      _historyError = null;
-    });
-
-    try {
-      final res = await http
-          .get(
-            Uri.parse('$_passHistoryUrl/$passId'),
-            headers: {'x-api-key': _apiKey},
-          )
-          .timeout(const Duration(milliseconds: 12000));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as List;
-        final historyList = data
-            .map((e) => PassHistoryItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-
-        setState(() {
-          _history = historyList;
-          _loadingHistory = false;
-        });
-      } else {
-        setState(() {
-          _historyError = 'Unable to load pass history.';
-          _loadingHistory = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _historyError = 'Unable to load pass history.';
-        _loadingHistory = false;
-      });
-    }
-  }
-
-  // ════════════════════════════════════════════════════════════════
   // CLEAR FORM
   // ════════════════════════════════════════════════════════════════
   void _clearForm() {
@@ -710,7 +738,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
       _vehicleNoCtrl.clear();
       _vehicleType = '';
       _brandModelCtrl.clear();
-      _passNoCtrl.clear(); // ✅ Clear pass number controller
+      _passNoCtrl.clear();
       _ecNoCtrl.clear();
       _empType = '';
       _clearEmployeeData();
@@ -751,8 +779,16 @@ class _PassEntryFormState extends State<PassEntryForm> {
         _buildPassDetailsSection(),
         _buildStatusSection(),
         _buildDocumentsSection(),
+        _buildRemarkSection(),
         _buildActionButtons(),
-        if (_registryId != null) _buildHistorySection(),
+        if (_workflowSuccess != null) ...[
+          const SizedBox(height: 8),
+          _buildAlert(success: true, message: _workflowSuccess!),
+        ],
+        if (_workflowError != null) ...[
+          const SizedBox(height: 8),
+          _buildAlert(success: false, message: _workflowError!),
+        ],
         if (_saveSuccess != null) ...[
           const SizedBox(height: 8),
           _buildAlert(success: true, message: _saveSuccess!),
@@ -883,7 +919,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
+                                valueColor: AlwaysStoppedAnimation(
                                   Colors.white,
                                 ),
                               ),
@@ -907,7 +943,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
             _empFetchError == null) ...[
           const SizedBox(height: 8),
           _buildMessageBanner(
-            message: 'Employee Found: $_empName  $_empDept',
+            message: 'Employee Found: $_empName $_empDept',
             isError: false,
           ),
         ],
@@ -1003,7 +1039,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
-  // ── STATUS ────────────────────────────────────────────────     Widget _buildStatusSection() {
+  // ── STATUS ────────────────────────────────────────────────
   Widget _buildStatusSection() {
     return PassSection(
       icon: Icons.schema,
@@ -1387,18 +1423,44 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
+  // ── REMARK SECTION (Approver) ───────────────────────────────────
+  Widget _buildRemarkSection() {
+    if (!widget.isApproverMode) {
+      return const SizedBox.shrink();
+    }
+    return PassSection(
+      icon: Icons.chat_bubble_outline,
+      title: 'Approver Remark',
+      children: [
+        PassField(
+          label: 'Remark',
+          hintText: 'Enter remark',
+          controller: _remarkCtrl,
+          readOnly: _isWorkflowSubmitting,
+          maxLines: 4,
+          width: double.infinity,
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Remark required for workflow action',
+          style: TextStyle(
+            fontSize: 11,
+            color: Color(0xFF627D98),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ── ACTION BUTTONS ──────────────────────────────────────────────
   Widget _buildActionButtons() {
-    final canEdit =
-        !_isReadOnly &&
-        (_status == 'DRAFT' ||
-            _status == 'SAVED' ||
-            _status == 'MODIFY' ||
-            _status == 'NEEDS_MODIFICATION' ||
-            _status == 'NEEDSMODIFICATION');
+    final canEdit = _canEdit;
+    final canApprove = _canApprove;
 
     return Column(
       children: [
+        // Entry user buttons
         if (canEdit) ...[
           Row(
             children: [
@@ -1435,7 +1497,53 @@ class _PassEntryFormState extends State<PassEntryForm> {
             ),
           ),
         ],
-        if (_isReadOnly)
+
+        // Approver actions
+        if (canApprove) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: PassActionButton(
+                  label: _isWorkflowSubmitting
+                      ? 'Processing...'
+                      : 'Send Modification',
+                  icon: Icons.edit,
+                  backgroundColor: const Color(0xFFF59E0B),
+                  foregroundColor: Colors.white,
+                  onPressed: _isWorkflowSubmitting ? null : _sendForModify,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PassActionButton(
+                  label: _isWorkflowSubmitting ? 'Processing...' : 'Reject',
+                  icon: Icons.close,
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  onPressed: _isWorkflowSubmitting ? null : _rejectPass,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: PassActionButton(
+              label: _isWorkflowSubmitting
+                  ? 'Processing...'
+                  : 'Approve & Activate',
+              icon: Icons.check_circle,
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              onPressed: _isWorkflowSubmitting ? null : _approvePass,
+            ),
+          ),
+        ],
+
+        // Read-only back
+        if (_isReadOnly && !widget.isApproverMode) ...[
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: PassActionButton(
@@ -1446,200 +1554,9 @@ class _PassEntryFormState extends State<PassEntryForm> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-      ],
-    );
-  }
-
-  // ── HistorySection ─────────────────────────────────────────────
-  Widget _buildHistorySection() {
-    if (_registryId == null) return const SizedBox.shrink();
-
-    return PassSection(
-      icon: Icons.history,
-      title: 'Pass History',
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _toggleHistory,
-            icon: const Icon(Icons.history),
-            label: Text(_showHistory ? 'Hide History' : 'Show History'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEFF6FF),
-              foregroundColor: const Color(0xFF1D4ED8),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-        ),
-        if (_showHistory) ...[
-          const SizedBox(height: 12),
-          if (_loadingHistory)
-            _buildHistoryLoading()
-          else if (_historyError != null)
-            _buildHistoryError()
-          else if (_history.isEmpty)
-            _buildHistoryEmpty()
-          else
-            _buildHistoryList(),
         ],
       ],
     );
-  }
-
-  Widget _buildHistoryLoading() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD9E2EC)),
-      ),
-      child: const Row(
-        children: [
-          SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 10),
-          Text(
-            'Loading history...',
-            style: TextStyle(
-              color: Color(0xFF102A43),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryError() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, size: 18, color: Color(0xFF7F1D1D)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _historyError ?? 'Unable to load pass history.',
-              style: const TextStyle(
-                color: Color(0xFF7F1D1D),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryEmpty() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD9E2EC)),
-      ),
-      child: const Center(
-        child: Text(
-          'No history available',
-          style: TextStyle(
-            color: Color(0xFF627D98),
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistoryList() {
-    return Column(children: _history.map((h) => _buildHistoryRow(h)).toList());
-  }
-
-  Widget _buildHistoryRow(PassHistoryItem h) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD9E2EC)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  h.action.isEmpty ? '-' : h.action,
-                  style: const TextStyle(
-                    color: Color(0xFF102A43),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _formatHistoryDateTime(h.dateOfEntry),
-                style: const TextStyle(
-                  color: Color(0xFF627D98),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'By: ${h.empCode.isEmpty ? 'SYSTEM' : h.empCode}',
-            style: const TextStyle(
-              color: Color(0xFF627D98),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (h.remark.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              h.remark,
-              style: const TextStyle(
-                color: Color(0xFF102A43),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _formatHistoryDateTime(String isoDate) {
-    if (isoDate.isEmpty) return '-';
-    try {
-      final dt = DateTime.parse(isoDate);
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
-          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return isoDate;
-    }
   }
 
   // ── MESSAGE BANNERS ─────────────────────────────────────────────

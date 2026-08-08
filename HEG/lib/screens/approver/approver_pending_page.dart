@@ -5,7 +5,7 @@ import '../../data/session_store.dart';
 import '../../data/pass_registry_api.dart';
 import '../../models/pass_registry_item.dart';
 import '../../widgets/heg_app_bar.dart';
-import '../../pass_entry/pass_entry_page.dart'; // ← THIS is correct
+import '../pass_entry/pass_entry_page.dart'; // ← THIS is correct
 
 class ApproverPendingPage extends StatefulWidget {
   const ApproverPendingPage({super.key});

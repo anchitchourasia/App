@@ -72,7 +72,7 @@ class ApproverVehicleMenuPage extends StatelessWidget {
                         title: 'Pending for Approver',
                         subtitle:
                             'SUBMITTED / CONFIRMED passes awaiting your approval',
-                        icon: Icons.shield_check,
+                        icon: Icons.verified_user, // ← FIXED
                         onTap: () {
                           Navigator.push(
                             context,
