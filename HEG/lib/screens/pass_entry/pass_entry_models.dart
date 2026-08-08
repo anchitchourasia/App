@@ -1,12 +1,12 @@
 class PassDocumentModel {
   final int? documentId;
-  String documentType;      // RC, INSURANCE, LICENSE
+  String documentType; // RC, INSURANCE, LICENSE
   String documentNo;
-  String expiryDate;        // YYYY-MM-DD
+  String expiryDate; // YYYY-MM-DD
   final String fileKey;
   final String fileName;
   // For mobile, we can store path or bytes instead of File
-  final String? filePath;   // or Uint8List fileBytes;
+  final String? filePath; // or Uint8List fileBytes;
 
   PassDocumentModel({
     this.documentId,
@@ -35,14 +35,15 @@ class PassRequestModel {
   final int? id;
   final int? passNo;
   final String vehicleNo;
-  final String vehicleType;   // BIKE, SCOOTER, CAR, TRUCK, DUMPER, JCB, CRANE, TRACTOR
+  final String
+  vehicleType; // BIKE, SCOOTER, CAR, TRUCK, DUMPER, JCB, CRANE, TRACTOR
   final String brandModel;
   final String employeeNo;
-  final String empType;       // HEG, TACC, CONTRACT, CRE-PRM
+  final String empType; // HEG, TACC, CONTRACT, CRE-PRM
   final String? contractorCode;
-  final String gateNo;        // GATE_01 … GATE_05
+  final String gateNo; // GATE_01 … GATE_05
   final String parkingToBeUsed; // P1 … P5
-  final String status;        // DRAFT, SAVED, SUBMITTED, etc.
+  final String status; // DRAFT, SAVED, SUBMITTED, etc.
   final String? remark;
   final String enterBy;
   final List<PassDocumentModel> documents;
@@ -81,5 +82,34 @@ class PassRequestModel {
       'enterBy': enterBy,
       'documents': documents.map((d) => d.toJson()).toList(),
     };
+  }
+}
+
+class PassHistoryItem {
+  final int? id;
+  final String passNo;
+  final String empCode;
+  final String action;
+  final String remark;
+  final String dateOfEntry;
+
+  PassHistoryItem({
+    this.id,
+    required this.passNo,
+    required this.empCode,
+    required this.action,
+    required this.remark,
+    required this.dateOfEntry,
+  });
+
+  factory PassHistoryItem.fromJson(Map<String, dynamic> json) {
+    return PassHistoryItem(
+      id: json['id'] as int?,
+      passNo: (json['passNo'] ?? '').toString(),
+      empCode: (json['empCode'] ?? '').toString(),
+      action: (json['action'] ?? '').toString(),
+      remark: (json['remark'] ?? '').toString(),
+      dateOfEntry: (json['dateOfEntry'] ?? '').toString(),
+    );
   }
 }

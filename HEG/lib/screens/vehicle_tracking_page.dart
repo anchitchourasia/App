@@ -488,6 +488,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                   'DRAFT',
                   'SUBMITTED',
                   'REJECT',
+                  'NEEDSMODIFICATION',
                 ], onStatusChange),
               ),
               const SizedBox(width: 8),
@@ -557,6 +558,21 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
 
   Widget _buildPassCard(PassRegistryItem row) {
     final badgeColor = statusColor(row.status);
+
+    // 1. Clean status string
+    final statusUpper = row.status.trim().toUpperCase();
+
+    // 2. Sticker button shows ONLY when ACTIVE or APPROVED
+    final showSticker = statusUpper == 'ACTIVE' || statusUpper == 'APPROVED';
+
+    // 3. Edit button shows ONLY for Draft / Modification states
+    // (Explicitly excluded for ACTIVE, APPROVED, and SUBMITTED)
+    final showEdit =
+        statusUpper == 'DRAFT' ||
+        statusUpper == 'SAVED' ||
+        statusUpper == 'MODIFY' ||
+        statusUpper == 'NEEDS_MODIFICATION' ||
+        statusUpper == 'NEEDSMODIFICATION';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -675,6 +691,8 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               ],
             ),
             const SizedBox(height: 12),
+
+            // Action Buttons
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -686,20 +704,22 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                   background: const Color(0xFFEAF2FF),
                   onTap: () => viewPass(row),
                 ),
-                _actionButton(
-                  label: 'Sticker',
-                  icon: Icons.print_outlined,
-                  foreground: const Color(0xFF334155),
-                  background: const Color(0xFFF1F5F9),
-                  onTap: () => printSticker(row),
-                ),
-                _actionButton(
-                  label: 'Edit',
-                  icon: Icons.edit_outlined,
-                  foreground: accentDark,
-                  background: const Color(0xFFEAF2FF),
-                  onTap: () => editPass(row),
-                ),
+                if (showSticker)
+                  _actionButton(
+                    label: 'Sticker',
+                    icon: Icons.print_outlined,
+                    foreground: const Color(0xFF334155),
+                    background: const Color(0xFFF1F5F9),
+                    onTap: () => printSticker(row),
+                  ),
+                if (showEdit)
+                  _actionButton(
+                    label: 'Edit',
+                    icon: Icons.edit_outlined,
+                    foreground: accentDark,
+                    background: const Color(0xFFEAF2FF),
+                    onTap: () => editPass(row),
+                  ),
               ],
             ),
           ],

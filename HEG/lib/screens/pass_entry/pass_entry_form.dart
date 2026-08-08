@@ -83,6 +83,12 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
   bool get _isReadOnly => widget.isViewMode;
 
+  // ── Pass History ───────────────────────────────────────────────
+  bool _showHistory = false;
+  bool _loadingHistory = false;
+  String? _historyError;
+  List<PassHistoryItem> _history = [];
+
   // ── Constants ──────────────────────────────────────────────────
   static const _vehicleTypes = [
     'BIKE',
@@ -105,6 +111,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String get _passUpdateUrl => ApiConfig.passUpdate;
   String get _passListUrl => ApiConfig.passList;
   String get _apiKey => ApiConfig.apiKey;
+  String get _passHistoryUrl => ApiConfig.passHistory;
 
   // ── Lifecycle ───────────────────────────────────────────────────
   @override
@@ -329,40 +336,50 @@ class _PassEntryFormState extends State<PassEntryForm> {
     return true;
   }
 
-  bool _validateDocuments() {
+  bool _validateDocuments({bool isSubmit = false}) {
     if (_documents.isEmpty) {
       _saveError = 'Please add at least one document.';
+      return false;
+    }
+
+    // Enforce ALL 3 documents ONLY on Submit (Save Draft remains unaffected)
+    if (isSubmit && _documents.length < _allowedDocTypes.length) {
+      _saveError =
+          'All 3 documents (${_allowedDocTypes.join(", ")}) are required for submission.';
       return false;
     }
 
     for (var i = 0; i < _documents.length; i++) {
       final doc = _documents[i];
       if (doc.documentType.trim().isEmpty) {
-        _saveError = 'Please select Document Type for row ${i + 1}.';
+        _saveError = 'Please select Document Type for Document #${i + 1}.';
         return false;
       }
       if (doc.documentNo.trim().isEmpty) {
-        _saveError = 'Please enter Document Number for row ${i + 1}.';
+        _saveError = 'Please enter Document Number for Document #${i + 1}.';
         return false;
       }
       if (doc.expiryDate.trim().isEmpty) {
-        _saveError = 'Please select Expiry Date for row ${i + 1}.';
+        _saveError = 'Please select Expiry Date for Document #${i + 1}.';
         return false;
       }
-      if (doc.filePath == null || doc.filePath!.isEmpty) {
-        _saveError = 'Please upload a file for row ${i + 1}.';
+      final hasFile =
+          (doc.filePath != null && doc.filePath!.isNotEmpty) ||
+          doc.fileName.trim().isNotEmpty;
+      if (!hasFile) {
+        _saveError = 'Please upload a file for Document #${i + 1}.';
         return false;
       }
     }
     return true;
   }
 
-  bool _validateForm() {
+  bool _validateForm({bool isSubmit = false}) {
     _saveError = null;
     if (!_validateVehicle()) return false;
     if (!_validateEmployee()) return false;
     if (!_validateGateAndParking()) return false;
-    if (!_validateDocuments()) return false;
+    if (!_validateDocuments(isSubmit: isSubmit)) return false;
     return true;
   }
 
@@ -396,7 +413,8 @@ class _PassEntryFormState extends State<PassEntryForm> {
   // SAVE / SUBMIT
   // ════════════════════════════════════════════════════════════════
   Future<void> _savePass({bool submit = false}) async {
-    if (!_validateForm()) {
+    if (!_validateForm(isSubmit: submit)) {
+      // <--- Pass submit flag here
       setState(() {});
       return;
     }
@@ -633,6 +651,58 @@ class _PassEntryFormState extends State<PassEntryForm> {
   }
 
   // ════════════════════════════════════════════════════════════════
+  // toggleHistory
+  // ════════════════════════════════════════════════════════════════
+
+  void _toggleHistory() {
+    setState(() {
+      _showHistory = !_showHistory;
+    });
+
+    if (_showHistory && _registryId != null && _history.isEmpty) {
+      _loadHistory(_registryId!);
+    }
+  }
+
+  Future<void> _loadHistory(int passId) async {
+    setState(() {
+      _loadingHistory = true;
+      _historyError = null;
+    });
+
+    try {
+      final res = await http
+          .get(
+            Uri.parse('$_passHistoryUrl/$passId'),
+            headers: {'x-api-key': _apiKey},
+          )
+          .timeout(const Duration(milliseconds: 12000));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as List;
+        final historyList = data
+            .map((e) => PassHistoryItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+
+        setState(() {
+          _history = historyList;
+          _loadingHistory = false;
+        });
+      } else {
+        setState(() {
+          _historyError = 'Unable to load pass history.';
+          _loadingHistory = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _historyError = 'Unable to load pass history.';
+        _loadingHistory = false;
+      });
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
   // CLEAR FORM
   // ════════════════════════════════════════════════════════════════
   void _clearForm() {
@@ -682,6 +752,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
         _buildStatusSection(),
         _buildDocumentsSection(),
         _buildActionButtons(),
+        if (_registryId != null) _buildHistorySection(),
         if (_saveSuccess != null) ...[
           const SizedBox(height: 8),
           _buildAlert(success: true, message: _saveSuccess!),
@@ -932,7 +1003,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     );
   }
 
-  // ── STATUS ─────────────────────────────────────────────────────
+  // ── STATUS ────────────────────────────────────────────────     Widget _buildStatusSection() {
   Widget _buildStatusSection() {
     return PassSection(
       icon: Icons.schema,
@@ -1188,42 +1259,41 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
   Widget _buildDocFileCell(int index) {
     final doc = _documents[index];
-    if (doc.filePath != null && doc.filePath!.isNotEmpty) {
-      return GestureDetector(
-        onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFFDCFCE7),
-            border: Border.all(color: const Color(0xFF86EFAC)),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                size: 13,
-                color: Color(0xFF15803D),
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  doc.fileName.isEmpty ? 'Uploaded' : doc.fileName,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF15803D),
-                  ),
-                  overflow: TextOverflow.ellipsis,
+    final hasFile =
+        (doc.filePath != null && doc.filePath!.isNotEmpty) ||
+        doc.fileName.isNotEmpty;
+
+    if (hasFile) {
+      // Return Container directly (No GestureDetector wrapper)
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDCFCE7),
+          border: Border.all(color: const Color(0xFF86EFAC)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.check_circle, size: 13, color: Color(0xFF15803D)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                doc.fileName.isEmpty ? 'Uploaded' : doc.fileName,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF15803D),
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
+    // Upload button remains clickable when no file is present
     return GestureDetector(
       onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
       child: Container(
@@ -1378,6 +1448,198 @@ class _PassEntryFormState extends State<PassEntryForm> {
           ),
       ],
     );
+  }
+
+  // ── HistorySection ─────────────────────────────────────────────
+  Widget _buildHistorySection() {
+    if (_registryId == null) return const SizedBox.shrink();
+
+    return PassSection(
+      icon: Icons.history,
+      title: 'Pass History',
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _toggleHistory,
+            icon: const Icon(Icons.history),
+            label: Text(_showHistory ? 'Hide History' : 'Show History'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEFF6FF),
+              foregroundColor: const Color(0xFF1D4ED8),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        if (_showHistory) ...[
+          const SizedBox(height: 12),
+          if (_loadingHistory)
+            _buildHistoryLoading()
+          else if (_historyError != null)
+            _buildHistoryError()
+          else if (_history.isEmpty)
+            _buildHistoryEmpty()
+          else
+            _buildHistoryList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHistoryLoading() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD9E2EC)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text(
+            'Loading history...',
+            style: TextStyle(
+              color: Color(0xFF102A43),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryError() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 18, color: Color(0xFF7F1D1D)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _historyError ?? 'Unable to load pass history.',
+              style: const TextStyle(
+                color: Color(0xFF7F1D1D),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryEmpty() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD9E2EC)),
+      ),
+      child: const Center(
+        child: Text(
+          'No history available',
+          style: TextStyle(
+            color: Color(0xFF627D98),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryList() {
+    return Column(children: _history.map((h) => _buildHistoryRow(h)).toList());
+  }
+
+  Widget _buildHistoryRow(PassHistoryItem h) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFD9E2EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  h.action.isEmpty ? '-' : h.action,
+                  style: const TextStyle(
+                    color: Color(0xFF102A43),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatHistoryDateTime(h.dateOfEntry),
+                style: const TextStyle(
+                  color: Color(0xFF627D98),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'By: ${h.empCode.isEmpty ? 'SYSTEM' : h.empCode}',
+            style: const TextStyle(
+              color: Color(0xFF627D98),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (h.remark.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              h.remark,
+              style: const TextStyle(
+                color: Color(0xFF102A43),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatHistoryDateTime(String isoDate) {
+    if (isoDate.isEmpty) return '-';
+    try {
+      final dt = DateTime.parse(isoDate);
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return isoDate;
+    }
   }
 
   // ── MESSAGE BANNERS ─────────────────────────────────────────────
