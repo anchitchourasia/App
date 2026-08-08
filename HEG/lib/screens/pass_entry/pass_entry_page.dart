@@ -61,22 +61,25 @@ class _PassEntryPageState extends State<PassEntryPage> {
 
   Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const Icon(Icons.badge, color: Color(0xFF1D6FD8), size: 26),
-          const SizedBox(width: 8),
-          Text(
-            _title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0F2040),
+          const Icon(Icons.badge, color: Color(0xFF1D6FD8), size: 22),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              _title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F2040),
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFFDBEAFF),
               borderRadius: BorderRadius.circular(999),
@@ -85,36 +88,35 @@ class _PassEntryPageState extends State<PassEntryPage> {
             child: const Text(
               'General Details',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF1D6FD8),
               ),
             ),
           ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF94A3B8),
-                style: BorderStyle.solid,
-                strokeAlign: 1.5,
+          const SizedBox(width: 6),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF94A3B8)),
               ),
-            ),
-            child: Text(
-              widget.registryId != null
-                  ? 'ID : ${widget.registryId}'
-                  : 'Request ID generates on Save',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: widget.registryId != null
-                    ? FontWeight.w700
-                    : FontWeight.w600,
-                color: widget.registryId != null
-                    ? const Color(0xFF1558B0)
-                    : const Color(0xFF64748B),
+              child: Text(
+                widget.registryId != null
+                    ? 'ID : ${widget.registryId}'
+                    : 'Request ID generates on Save',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: widget.registryId != null
+                      ? FontWeight.w700
+                      : FontWeight.w600,
+                  color: widget.registryId != null
+                      ? const Color(0xFF1558B0)
+                      : const Color(0xFF64748B),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),

@@ -37,7 +37,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   final _passNoCtrl = TextEditingController();
 
   // ── Registry ID (local copy for update vs add) ──────────────────
-  int? _registryId; // ✅ add this
+  int? _registryId;
 
   // ── Employee ───────────────────────────────────────────────────
   final _ecNoCtrl = TextEditingController();
@@ -113,11 +113,8 @@ class _PassEntryFormState extends State<PassEntryForm> {
     _loadLoggedInUser();
     _registryId = widget.registryId;
 
-    // Auto-sync Pass No from Vehicle Details to Workflow Status
     _passNoCtrl.addListener(() {
-      setState(() {
-        // Pass No is already in _passNoCtrl.text, no need to copy
-      });
+      setState(() {});
     });
 
     if (widget.registryId != null) {
@@ -129,6 +126,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   void dispose() {
     _vehicleNoCtrl.dispose();
     _brandModelCtrl.dispose();
+    _passNoCtrl.dispose();
     _ecNoCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -233,6 +231,8 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _vehicleNoCtrl.text = (data['vehicleNo'] ?? '').toString();
           _vehicleType = (data['vehicleType'] ?? '').toString();
           _brandModelCtrl.text = (data['brandModel'] ?? '').toString();
+          _passNoCtrl.text = (data['passNo'] ?? '')
+              .toString(); // ✅ Set pass number to controller
           _ecNoCtrl.text = (data['employeeNo'] ?? '').toString();
           _empType = (data['empType'] ?? '').toString();
           _gateNo = (data['gateNo'] ?? '').toString();
@@ -422,8 +422,6 @@ class _PassEntryFormState extends State<PassEntryForm> {
 
     Future<http.Response> _sendMultipart() async {
       if (_registryId != null) {
-        // EDIT MODE → PUT /update/{id}
-        print('FLUTTER: UPDATE MODE, ID = $_registryId');
         final formData = http.MultipartRequest(
           'PUT',
           Uri.parse('$_passUpdateUrl/$_registryId'),
@@ -458,8 +456,6 @@ class _PassEntryFormState extends State<PassEntryForm> {
         return http.Response.fromStream(streamed);
       }
 
-      // ADD MODE → POST /save
-      print('FLUTTER: ADD MODE (POST /save)');
       final formData = http.MultipartRequest('POST', Uri.parse(_passSaveUrl));
       formData.headers['x-api-key'] = _apiKey;
 
@@ -497,8 +493,11 @@ class _PassEntryFormState extends State<PassEntryForm> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         setState(() {
-          _registryId ??= data['id'] as int?; // capture id after first save
+          _registryId ??= data['id'] as int?;
           _passNo = data['passNo'] as int?;
+          if (_passNo != null) {
+            _passNoCtrl.text = _passNo.toString();
+          }
           _status = (data['reqStatus'] ?? (submit ? 'SUBMITTED' : 'DRAFT'))
               .toString();
           _saveSuccess = submit
@@ -641,6 +640,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
       _vehicleNoCtrl.clear();
       _vehicleType = '';
       _brandModelCtrl.clear();
+      _passNoCtrl.clear(); // ✅ Clear pass number controller
       _ecNoCtrl.clear();
       _empType = '';
       _clearEmployeeData();
@@ -953,10 +953,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
               const SizedBox(height: 6),
               _statusRow(
                 'Pass No',
-                _passNoCtrl.text.trim().isEmpty
-                    ? '-'
-                    : _passNoCtrl.text
-                          .trim(), // ✅ Auto-renders from Vehicle Details
+                _passNoCtrl.text.trim().isEmpty ? '-' : _passNoCtrl.text.trim(),
               ),
             ],
           ),
@@ -999,160 +996,190 @@ class _PassEntryFormState extends State<PassEntryForm> {
       title: 'Required Documents',
       badge: '${_documents.length} Added',
       children: [
-        _buildDocTableHeader(),
-        ...List.generate(_documents.length, (i) => _buildDocRow(i)),
-        const SizedBox(height: 10),
+        ...List.generate(_documents.length, (i) => _buildDocCard(i)),
+        const SizedBox(height: 6),
         _buildAddDocButton(),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         _buildDocInfo(),
       ],
     );
   }
 
-  Widget _buildDocTableHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0F2040), Color(0xFF1A3560)],
-        ),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(10),
-          topRight: Radius.circular(10),
-        ),
-      ),
-      child: const Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              'Doc Type',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              'Doc No',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Expiry',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              'File',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          SizedBox(width: 28),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDocRow(int index) {
+  Widget _buildDocCard(int index) {
     final doc = _documents[index];
     return Container(
-      margin: const EdgeInsets.only(top: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: index % 2 == 0 ? const Color(0xFFF8FAFD) : Colors.white,
-        border: Border.all(color: const Color(0xFFC8D6E8)),
-        borderRadius: index == _documents.length - 1
-            ? const BorderRadius.only(
-                bottomLeft: Radius.circular(10),
-                bottomRight: Radius.circular(10),
-              )
-            : BorderRadius.zero,
+        color: const Color(0xFFF8FAFD),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 3,
-            child: PassDropdownSmall(
-              value: doc.documentType.isEmpty ? null : doc.documentType,
-              items: _availableDocTypes(index),
-              hint: '-- Select --',
-              onChanged: _isReadOnly
-                  ? null
-                  : (v) {
-                      if (v == null) return;
-                      setState(() {
-                        _documents[index] = PassDocumentModel(
-                          documentId: doc.documentId,
-                          documentType: v,
-                          documentNo: '',
-                          expiryDate: '',
-                          fileKey: doc.fileKey,
-                          fileName: doc.fileName,
-                          filePath: doc.filePath,
-                        );
-                      });
-                    },
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Document #${index + 1}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2040),
+                ),
+              ),
+              if (!_isReadOnly && _documents.length > 1)
+                InkWell(
+                  onTap: () => _removeDocument(index),
+                  borderRadius: BorderRadius.circular(4),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 16,
+                          color: Color(0xFFEF4444),
+                        ),
+                        SizedBox(width: 2),
+                        Text(
+                          'Remove',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 4),
-          Expanded(
-            flex: 3,
-            child: PassFieldSmall(
-              hintText: 'Doc No',
-              initialValue: doc.documentNo,
-              readOnly: _isReadOnly,
-              onChanged: (v) => setState(() {
-                _documents[index].documentNo = v;
-              }),
-              textTransform: TextTransform.uppercase,
-            ),
+          const Divider(height: 16, thickness: 1, color: Color(0xFFE2E8F0)),
+
+          // Field Group 1: Doc Type & Expiry
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Doc Type',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E3A6E),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    PassDropdownSmall(
+                      value: doc.documentType.isEmpty ? null : doc.documentType,
+                      items: _availableDocTypes(index),
+                      hint: 'Select Type',
+                      onChanged: _isReadOnly
+                          ? null
+                          : (v) {
+                              if (v == null) return;
+                              setState(() {
+                                _documents[index] = PassDocumentModel(
+                                  documentId: doc.documentId,
+                                  documentType: v,
+                                  documentNo: doc.documentNo,
+                                  expiryDate: doc.expiryDate,
+                                  fileKey: doc.fileKey,
+                                  fileName: doc.fileName,
+                                  filePath: doc.filePath,
+                                );
+                              });
+                            },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Expiry Date',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E3A6E),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    PassDateFieldSmall(
+                      value: doc.expiryDate.isEmpty ? null : doc.expiryDate,
+                      enabled: !_isReadOnly,
+                      onDateSelected: (d) => setState(() {
+                        _documents[index].expiryDate = d;
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 4),
-          Expanded(
-            flex: 2,
-            child: PassDateFieldSmall(
-              value: doc.expiryDate.isEmpty ? null : doc.expiryDate,
-              enabled: !_isReadOnly,
-              onDateSelected: (d) => setState(() {
-                _documents[index].expiryDate = d;
-              }),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(flex: 3, child: _buildDocFileCell(index)),
-          const SizedBox(width: 2),
-          SizedBox(
-            width: 28,
-            child: IconButton(
-              icon: const Icon(Icons.close, size: 16),
-              color: const Color(0xFFF87171),
-              onPressed: _isReadOnly || _documents.length == 1
-                  ? null
-                  : () => _removeDocument(index),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
+          const SizedBox(height: 10),
+
+          // Field Group 2: Doc Number & File Upload
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Doc Number',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E3A6E),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    PassFieldSmall(
+                      hintText: 'Enter Doc No',
+                      initialValue: doc.documentNo,
+                      readOnly: _isReadOnly,
+                      onChanged: (v) => setState(() {
+                        _documents[index].documentNo = v;
+                      }),
+                      textTransform: TextTransform.uppercase,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Attachment',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E3A6E),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _buildDocFileCell(index),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1165,26 +1192,26 @@ class _PassEntryFormState extends State<PassEntryForm> {
       return GestureDetector(
         onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           decoration: BoxDecoration(
             color: const Color(0xFFDCFCE7),
             border: Border.all(color: const Color(0xFF86EFAC)),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(
                 Icons.check_circle,
                 size: 13,
                 color: Color(0xFF15803D),
               ),
-              const SizedBox(width: 3),
+              const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   doc.fileName.isEmpty ? 'Uploaded' : doc.fileName,
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF15803D),
                   ),
@@ -1200,28 +1227,23 @@ class _PassEntryFormState extends State<PassEntryForm> {
     return GestureDetector(
       onTap: _isReadOnly ? null : () => _pickFileForDoc(index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFFDBEAFF),
-          border: Border.all(
-            color: const Color(0xFF93C5FD),
-            style: BorderStyle.solid,
-          ),
+          border: Border.all(color: const Color(0xFF93C5FD)),
           borderRadius: BorderRadius.circular(6),
         ),
         child: const Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.cloud_upload, size: 13, color: Color(0xFF1D4ED8)),
-            SizedBox(width: 3),
-            Flexible(
-              child: Text(
-                'Upload',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1D4ED8),
-                ),
+            SizedBox(width: 4),
+            Text(
+              'Upload',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1D4ED8),
               ),
             ),
           ],

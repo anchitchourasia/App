@@ -281,6 +281,7 @@ class PassDropdown extends StatelessWidget {
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(
             value: value,
+            isExpanded: true,
             decoration: InputDecoration(
               filled: true,
               fillColor: enabled
@@ -309,13 +310,18 @@ class PassDropdown extends StatelessWidget {
                 .map(
                   (e) => DropdownMenuItem(
                     value: e,
-                    child: Text(e, style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      e,
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 )
                 .toList(),
             hint: Text(
               hint,
               style: const TextStyle(fontSize: 12, color: Color(0xFFB0BEC5)),
+              overflow: TextOverflow.ellipsis,
             ),
             onChanged: enabled ? onChanged : null,
           ),
@@ -344,6 +350,7 @@ class PassDropdownSmall extends StatelessWidget {
     final enabled = onChanged != null;
     return DropdownButtonFormField<String>(
       value: value,
+      isExpanded: true,
       decoration: InputDecoration(
         filled: true,
         fillColor: enabled ? const Color(0xFFF8FAFD) : const Color(0xFFEEF2F7),
@@ -361,13 +368,18 @@ class PassDropdownSmall extends StatelessWidget {
           .map(
             (e) => DropdownMenuItem(
               value: e,
-              child: Text(e, style: const TextStyle(fontSize: 11)),
+              child: Text(
+                e,
+                style: const TextStyle(fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           )
           .toList(),
       hint: Text(
         hint,
         style: const TextStyle(fontSize: 11, color: Color(0xFFB0BEC5)),
+        overflow: TextOverflow.ellipsis,
       ),
       onChanged: enabled ? onChanged : null,
     );
@@ -395,7 +407,6 @@ class PassFieldSmall extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ctrl = TextEditingController(text: initialValue);
-    // Use ValueKey so Flutter knows when to rebuild/reset the controller.
     return TextField(
       key: ValueKey(initialValue),
       controller: ctrl,
@@ -438,7 +449,7 @@ class PassFieldSmall extends StatelessWidget {
 }
 
 class PassDateFieldSmall extends StatelessWidget {
-  final String? value; // YYYY-MM-DD
+  final String? value;
   final bool enabled;
   final ValueChanged<String> onDateSelected;
 
@@ -501,7 +512,11 @@ class PassDateFieldSmall extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(value ?? '', style: const TextStyle(fontSize: 11)),
+                child: Text(
+                  value ?? '',
+                  style: const TextStyle(fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Icon(
                 Icons.calendar_today,
