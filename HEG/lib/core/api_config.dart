@@ -4,6 +4,8 @@ class ApiConfig {
   static const String baseUrl = AppConfig.apiBaseUrl;
   static const String apiKey = AppConfig.apiKey;
 
+  static const String cvpsBaseUrl = AppConfig.cvpsBaseUrl;
+
   // AUTH
   static String authorityByEmp = '$baseUrl/api/authority';
   static String authorityUpdate = '$baseUrl/api/authority/update';
@@ -23,4 +25,13 @@ class ApiConfig {
   // GATE / COMPLIANCE
   static String gateLogs = '$baseUrl/api/gate-logs/list';
   static String compliance = '$baseUrl/api/compliance/list';
+
+  // CVPS (mirroring web API_CONFIG)
+  static String cvpsBase = '$cvpsBaseUrl/api/requests';
+  static String cvpsCreateRequest = '$cvpsBaseUrl/api/requests/create';
+  static String cvpsUpdateRequest = '$cvpsBaseUrl/api/requests/update';
+  static String cvpsGetRequestById = '$cvpsBaseUrl/api/requests';
+  static String cvpsGetAllRequests = '$cvpsBaseUrl/api/requests';
+  static String cvpsDeleteRequest = '$cvpsBaseUrl/api/requests';
+  static String cvpsBpRecords = '$cvpsBaseUrl/api/bp-records';
 }

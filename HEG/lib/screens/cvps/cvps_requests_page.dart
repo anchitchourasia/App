@@ -1,40 +1,40 @@
-// lib/screens/approver/approver_pending_page.dart
-import 'dart:async';
+/// CVPS Vehicle Permission list screen.
+/// Mirrors vehicle-permission-list.ts and uses same Pass Registry UI style.
 import 'package:flutter/material.dart';
-import '../../data/session_store.dart';
-import '../../data/pass_registry_api.dart';
-import '../../models/pass_registry_item.dart';
-import '../../widgets/heg_app_bar.dart';
-import '../pass_entry/pass_entry_page.dart';
 
-class ApproverPendingPage extends StatefulWidget {
-  const ApproverPendingPage({super.key});
+import '../../widgets/heg_app_bar.dart';
+import '../../data/cvps_api.dart';
+import '../../models/cvps_request_item.dart';
+
+class CvpsRequestsPage extends StatefulWidget {
+  const CvpsRequestsPage({super.key});
 
   @override
-  State<ApproverPendingPage> createState() => _ApproverPendingPageState();
+  State<CvpsRequestsPage> createState() => _CvpsRequestsPageState();
 }
 
-class _ApproverPendingPageState extends State<ApproverPendingPage> {
-  final PassRegistryApi api = PassRegistryApi();
+class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
+  // API client to call CVPS backend.
+  final CvpsApi api = CvpsApi();
+
+  // Search text controller.
   final TextEditingController searchController = TextEditingController();
 
-  List<PassRegistryItem> allPasses = [];
-  List<PassRegistryItem> pendingPasses = [];
+  // All rows from API.
+  List<CvpsRequestItem> allRows = [];
+
+  // Filtered rows after search/status filter.
+  List<CvpsRequestItem> filteredRows = [];
 
   bool loading = true;
   bool hasError = false;
   String errorMessage = '';
 
-  Timer? pollTimer;
-  DateTime? lastUpdated;
-
+  // Filter state: search string and status.
   String searchText = '';
+  String statusFilter = 'ALL';
 
-  int currentPage = 1;
-  int pageSize = 10;
-
-  static const Duration pollInterval = Duration(seconds: 30);
-
+  // Same gradient colors and panel style as Pass Registry.
   static const Color bg1 = Color(0xFF0B1E3A);
   static const Color bg2 = Color(0xFF0EA5A4);
 
@@ -45,156 +45,162 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   static const Color accentTeal = Color(0xFF0EA5A4);
   static const Color accentDark = Color(0xFF0B1E3A);
 
+  // Status filter options (same as web statusOptions).
+  final List<String> statusOptions = const [
+    'ALL',
+    'SAVED',
+    'CREATED',
+    'CONFIRMED',
+    'APPROVED',
+    'REJECTED',
+    'HOLD',
+    'MODIFY',
+    'SUBMITTED',
+  ];
+
   @override
   void initState() {
     super.initState();
-    loadPasses();
-    startPolling();
+    _loadRows();
   }
 
   @override
   void dispose() {
-    pollTimer?.cancel();
     searchController.dispose();
     super.dispose();
   }
 
-  void startPolling() {
-    pollTimer?.cancel();
-    pollTimer = Timer.periodic(pollInterval, (_) {
-      if (!mounted) return;
-      loadPasses(silent: true);
+  /// Loads all CVPS requests from backend and applies filters.
+  Future<void> _loadRows() async {
+    setState(() {
+      loading = true;
+      hasError = false;
+      errorMessage = '';
     });
-  }
-
-  Future<void> loadPasses({bool silent = false}) async {
-    if (!silent) {
-      setState(() {
-        loading = true;
-        hasError = false;
-        errorMessage = '';
-      });
-    }
 
     try {
-      final rows = await api.fetchPassRegistry();
-      if (!mounted) return;
+      final rows = await api.fetchAllRequests();
       setState(() {
-        allPasses = rows;
-        // Filter only SUBMITTED or CONFIRMED passes (pending for approver)
-        pendingPasses = rows.where((row) {
-          final status = row.status.trim().toUpperCase();
-          return status == 'SUBMITTED' || status == 'CONFIRMED';
-        }).toList();
-        lastUpdated = DateTime.now();
-        applyFilters();
+        allRows = rows;
+        _applyFilters();
+        loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
-      if (!silent) {
-        setState(() {
-          hasError = true;
-          errorMessage = e.toString();
-        });
-      }
-    } finally {
-      if (!mounted) return;
-      if (!silent) {
-        setState(() => loading = false);
-      }
+      setState(() {
+        hasError = true;
+        errorMessage = e.toString();
+        loading = false;
+      });
     }
   }
 
-  void applyFilters() {
-    // Apply search filter
-    pendingPasses = allPasses.where((row) {
-      // first filter by pending status
-      final status = row.status.trim().toUpperCase();
-      final isPending = status == 'SUBMITTED' || status == 'CONFIRMED';
-      if (!isPending) return false;
+  /// Applies search + status filters to allRows to produce filteredRows.
+  /// Mirrors filteredRows computed() in vehicle-permission-list.ts.
+  void _applyFilters() {
+    final search = searchText.trim().toLowerCase();
+    final statusUpper = statusFilter.trim().toUpperCase();
 
-      // then by search text
-      return row.matchesSearch(searchText);
+    filteredRows = allRows.where((row) {
+      final rowStatus = row.reqStatus.trim().toUpperCase();
+
+      // Status match: ALL or exact status.
+      final matchesStatus = statusUpper == 'ALL' || rowStatus == statusUpper;
+
+      // Search match: requestNo, contractorCode, vehicleNo, vehicleType,
+      // natureOfJob, createdBy.
+      final matchesSearch =
+          search.isEmpty ||
+          row.requestNo.toString().contains(search) ||
+          row.contractorCode.toLowerCase().contains(search) ||
+          row.vehicleNo.toLowerCase().contains(search) ||
+          row.vehicleType.toLowerCase().contains(search) ||
+          row.natureOfJob.toLowerCase().contains(search) ||
+          row.createdBy.toLowerCase().contains(search);
+
+      return matchesStatus && matchesSearch;
     }).toList();
-
-    final totalPagesLocal = (pendingPasses.length / pageSize).ceil();
-
-    // Clamp currentPage into a valid range
-    if (totalPagesLocal <= 0) {
-      currentPage = 1;
-    } else {
-      if (currentPage < 1) currentPage = 1;
-      if (currentPage > totalPagesLocal) currentPage = totalPagesLocal;
-    }
   }
 
-  List<PassRegistryItem> get pagedPasses {
-    if (pendingPasses.isEmpty) return [];
-
-    final totalPagesLocal = (pendingPasses.length / pageSize).ceil();
-    // Safe page between 1 and totalPagesLocal
-    final safePage = currentPage < 1
-        ? 1
-        : (currentPage > totalPagesLocal ? totalPagesLocal : currentPage);
-
-    final start = (safePage - 1) * pageSize;
-    var end = start + pageSize;
-    if (start >= pendingPasses.length) return [];
-    if (end > pendingPasses.length) end = pendingPasses.length;
-
-    return pendingPasses.sublist(start, end);
-  }
-
-  int get totalPages {
-    final total = (pendingPasses.length / pageSize).ceil();
-    return total == 0 ? 1 : total;
-  }
-
-  void onSearch(String value) {
+  /// Called when search text changes.
+  void _onSearchChange(String value) {
     setState(() {
       searchText = value;
-      currentPage = 1;
-      applyFilters();
+      _applyFilters();
     });
   }
 
-  void changePage(int page) {
-    if (page < 1 || page > totalPages) return;
-    setState(() => currentPage = page);
+  /// Called when status dropdown changes.
+  void _onStatusChange(String? value) {
+    if (value == null) return;
+    setState(() {
+      statusFilter = value;
+      _applyFilters();
+    });
   }
 
-  String formatDateString(String date) {
-    if (date.trim().isEmpty) return '-';
-    try {
-      final dt = DateTime.parse(date);
-      final dd = dt.day.toString().padLeft(2, '0');
-      final mm = dt.month.toString().padLeft(2, '0');
-      final yyyy = dt.year.toString();
-      return '$dd/$mm/$yyyy';
-    } catch (_) {
-      return date;
+  /// Returns human-readable label for a status, same as getStatusLabel(status).
+  String _getStatusLabel(String status) {
+    final normalized = status.trim().toUpperCase();
+    switch (normalized) {
+      case 'CREATED':
+      case 'SUBMITTED':
+        return 'Submitted';
+      case 'SAVED':
+        return 'Saved';
+      case 'CONFIRMED':
+        return 'Confirmed';
+      case 'APPROVED':
+        return 'Approved';
+      case 'REJECTED':
+        return 'Rejected';
+      case 'HOLD':
+        return 'Hold';
+      case 'MODIFY':
+        return 'MODIFY';
+      default:
+        return status.isEmpty ? '-' : status;
     }
   }
 
-  void reviewPass(PassRegistryItem row) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PassEntryPage(
-        registryId: row.passId,
-        isViewMode: false,
-        isApproverMode: true, // approver review mode
-      ),
+  /// Returns a color for status badge, similar to getStatusClass/status colors.
+  Color _getStatusColor(String status) {
+    final normalized = status.trim().toUpperCase();
+    switch (normalized) {
+      case 'SUBMITTED':
+      case 'CREATED':
+        return const Color(0xFF2563EB); // blue
+      case 'CONFIRMED':
+        return const Color(0xFF0891B2); // teal
+      case 'APPROVED':
+        return const Color(0xFF16A34A); // green
+      case 'REJECTED':
+        return const Color(0xFFDC2626); // red
+      case 'HOLD':
+      case 'MODIFY':
+        return const Color(0xFFF59E0B); // amber
+      case 'SAVED':
+        return const Color(0xFF6B7280); // gray
+      default:
+        return const Color(0xFF6B7280);
+    }
+  }
+
+  /// When user taps View button on a row.
+  /// This should open a full CVPS form screen in view mode.
+  /// For now, we navigate to '/cvpsForm' with requestNo as argument.
+  void _viewRequest(CvpsRequestItem row) {
+    Navigator.pushNamed(
+      context,
+      '/cvpsForm', // you will define this route in main.dart
+      arguments: row.requestNo,
     );
-    await loadPasses(silent: true);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const HegAppBar(title: 'Pending for Approver'),
+      appBar: const HegAppBar(title: 'CVPS Vehicle Permission Requests'),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -208,10 +214,10 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                 child: CircularProgressIndicator(color: Colors.white),
               )
             : hasError
-            ? ErrorView(message: errorMessage, onRetry: loadPasses)
+            ? ErrorView(message: errorMessage, onRetry: _loadRows)
             : RefreshIndicator(
                 color: accentTeal,
-                onRefresh: loadPasses,
+                onRefresh: _loadRows,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
                   children: [
@@ -219,12 +225,10 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                     const SizedBox(height: 10),
                     _buildControlPanel(),
                     const SizedBox(height: 12),
-                    if (pagedPasses.isEmpty)
+                    if (filteredRows.isEmpty)
                       const EmptyState()
                     else
-                      ...pagedPasses.map(_buildPassCard),
-                    const SizedBox(height: 12),
-                    _buildPaginationPanel(),
+                      ...filteredRows.map(_buildRequestCard),
                   ],
                 ),
               ),
@@ -232,11 +236,8 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
     );
   }
 
+  /// Summary at top: shows total & filtered counts.
   Widget _buildSummaryPanel() {
-    final lastUpdatedText = lastUpdated == null
-        ? '-'
-        : '${lastUpdated!.hour.toString().padLeft(2, '0')}:${lastUpdated!.minute.toString().padLeft(2, '0')}';
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(12),
@@ -248,7 +249,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Pending for Approval',
+            'Vehicle Permission Requests',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -257,7 +258,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Passes awaiting approver review',
+            'Contractor vehicle permissions with search and filters',
             style: TextStyle(
               color: Colors.white.withAlpha(185),
               fontSize: 12,
@@ -267,34 +268,10 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _summaryStat('Total', pendingPasses.length.toString()),
-              ),
+              Expanded(child: _summaryStat('Total', allRows.length.toString())),
               const SizedBox(width: 8),
               Expanded(
-                child: _summaryStat('Page', '$currentPage of $totalPages'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF22C55E),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Last updated $lastUpdatedText',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(190),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+                child: _summaryStat('Filtered', filteredRows.length.toString()),
               ),
             ],
           ),
@@ -335,6 +312,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
     );
   }
 
+  /// Search + status filter panel, same style as Pass Registry.
   Widget _buildControlPanel() {
     return Container(
       decoration: BoxDecoration(
@@ -350,40 +328,86 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
         ],
       ),
       padding: const EdgeInsets.all(12),
-      child: TextField(
-        controller: searchController,
-        onChanged: onSearch,
-        style: const TextStyle(
-          color: textPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          prefixIcon: const Icon(Icons.search, size: 20, color: textSecondary),
-          hintText: 'Search pass id, employee, contractor, vehicle...',
-          hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
-          filled: true,
-          fillColor: const Color(0xFFF8FAFC),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 14,
+      child: Column(
+        children: [
+          TextField(
+            controller: searchController,
+            onChanged: _onSearchChange,
+            style: const TextStyle(
+              color: textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 20,
+                color: textSecondary,
+              ),
+              hintText: 'Search request no, contractor, vehicle, status...',
+              hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: panelBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: accentTeal, width: 1.2),
+              ),
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: panelBorder),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: statusOptions.contains(statusFilter) ? statusFilter : 'ALL',
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'Status',
+              labelStyle: const TextStyle(
+                color: textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: panelBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: accentTeal, width: 1.2),
+              ),
+            ),
+            items: statusOptions
+                .map(
+                  (e) => DropdownMenuItem(
+                    value: e,
+                    child: Text(e, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: _onStatusChange,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: accentTeal, width: 1.2),
-          ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildPassCard(PassRegistryItem row) {
-    final badgeColor = const Color(0xFFD97706); // Warning color for pending
+  /// Builds a single CVPS request card, same card style as Pass Registry.
+  /// Includes a View button that opens the form screen.
+  Widget _buildRequestCard(CvpsRequestItem row) {
+    final badgeColor = _getStatusColor(row.reqStatus);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -407,6 +431,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Status stripe
                 Container(
                   width: 5,
                   height: 56,
@@ -416,6 +441,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                   ),
                 ),
                 const SizedBox(width: 10),
+                // Vehicle + meta
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,13 +460,12 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                         spacing: 10,
                         runSpacing: 4,
                         children: [
+                          _topMeta('Req No', row.requestNo.toString()),
                           _topMeta(
-                            'Pass',
-                            row.passNo.isEmpty ? '-' : row.passNo,
-                          ),
-                          _topMeta(
-                            'Gate',
-                            row.gateNo.isEmpty ? '-' : row.gateNo,
+                            'Contractor',
+                            row.contractorCode.isEmpty
+                                ? '-'
+                                : row.contractorCode,
                           ),
                           _topMeta(
                             'Type',
@@ -452,6 +477,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -463,7 +489,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
                     border: Border.all(color: badgeColor.withAlpha(40)),
                   ),
                   child: Text(
-                    row.status.isEmpty ? 'PENDING' : row.status,
+                    _getStatusLabel(row.reqStatus),
                     style: TextStyle(
                       color: badgeColor,
                       fontSize: 11,
@@ -477,43 +503,39 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
             const SizedBox(height: 12),
             const Divider(height: 1, color: panelBorder),
             const SizedBox(height: 12),
-            _dataLine('Employee', row.name),
-            _dataLine('EC No', row.employeeNo),
-            _dataLine('Emp Type', row.empType),
-            _dataLine('Department', row.deptName),
-            if (row.contractorName.isNotEmpty)
-              _dataLine('Contractor', row.contractorName),
+            _dataLine('Nature of Job', row.natureOfJob),
+            _dataLine('Permission To', row.permissionTo),
+            _dataLine('Created By', row.createdBy),
+            _dataLine('Created Date', row.createdDate),
             const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: _dateBox(
-                    'Issue Date',
-                    formatDateString(row.issueDate),
-                  ),
+                  child: _statBox('Personnel', row.personnelCount.toString()),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _dateBox(
-                    'Validity',
-                    formatDateString(row.validityDate),
+                  child: _statBox(
+                    'Documents',
+                    row.vehicleDocumentCount.toString(),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            // Action Buttons
+            // Action buttons (for now only View)
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 _actionButton(
-                  label: 'Review',
+                  label: 'View',
                   icon: Icons.visibility_outlined,
                   foreground: accentDark,
                   background: const Color(0xFFEAF2FF),
-                  onTap: () => reviewPass(row),
+                  onTap: () => _viewRequest(row),
                 ),
+                // Later you can add Edit/Delete/Pass buttons here.
               ],
             ),
           ],
@@ -551,7 +573,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 92,
+            width: 120,
             child: Text(
               label,
               style: const TextStyle(
@@ -576,7 +598,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
     );
   }
 
-  Widget _dateBox(String label, String value) {
+  Widget _statBox(String label, String value) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -644,110 +666,12 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
       ),
     );
   }
-
-  Widget _buildPaginationPanel() {
-    return Container(
-      decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Rows per page',
-                style: TextStyle(
-                  color: textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Wrap(
-                spacing: 6,
-                children: [10, 20, 50].map((size) {
-                  final selected = pageSize == size;
-                  return ChoiceChip(
-                    label: Text(
-                      size.toString(),
-                      style: TextStyle(
-                        color: selected ? Colors.white : textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    selected: selected,
-                    selectedColor: accentTeal,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    side: const BorderSide(color: panelBorder),
-                    onSelected: (_) {
-                      setState(() {
-                        pageSize = size;
-                        currentPage = 1;
-                        applyFilters();
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              OutlinedButton(
-                onPressed: currentPage > 1
-                    ? () => changePage(currentPage - 1)
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: panelBorder),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Prev'),
-              ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    'Page $currentPage of $totalPages',
-                    style: const TextStyle(
-                      color: textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: currentPage < totalPages
-                    ? () => changePage(currentPage + 1)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentDark,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Next'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// ================== ERROR VIEW ==================
+/// Simple error view (reuse style from Pass Registry).
 class ErrorView extends StatelessWidget {
   final String message;
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
 
   const ErrorView({super.key, required this.message, required this.onRetry});
 
@@ -773,7 +697,7 @@ class ErrorView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Failed to load pass registry',
+                'Failed to load CVPS requests',
                 style: TextStyle(
                   color: Color(0xFF102A43),
                   fontSize: 18,
@@ -793,7 +717,7 @@ class ErrorView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: onRetry,
+                onPressed: () => onRetry(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0B1E3A),
                   foregroundColor: Colors.white,
@@ -809,7 +733,6 @@ class ErrorView extends StatelessWidget {
   }
 }
 
-// ================== EMPTY STATE ==================
 class EmptyState extends StatelessWidget {
   const EmptyState({super.key});
 
@@ -827,7 +750,7 @@ class EmptyState extends StatelessWidget {
           Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
           SizedBox(height: 10),
           Text(
-            'No pending passes',
+            'No permission requests found',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -836,7 +759,7 @@ class EmptyState extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'All passes have been reviewed.',
+            'Try changing search text or filter values.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Color(0xFF627D98),

@@ -23,7 +23,8 @@ import 'screens/notifications_page.dart';
 import 'data/session_store.dart';
 import 'screens/vehicle_tracking_page.dart';
 import 'screens/approver/approver_menu_page.dart';
-
+import 'screens/cvps/cvps_requests_page.dart';
+import 'screens/cvps/cvps_form_page.dart';
 // ✅ NEW: Applicants page
 import 'screens/applicants_page.dart';
 
@@ -63,6 +64,8 @@ class MyApp extends StatelessWidget {
         '/employeeDetails': (_) => const EmployeeDetailsPage(),
         '/settings': (_) => const SettingsPage(),
         '/profile': (_) => const ProfilePage(),
+        '/cvpsRequests': (context) => const CvpsRequestsPage(),
+        '/cvpsForm': (context) => const CvpsFormPage(), // to be implemented
 
         '/insuranceUpload': (_) => InsuranceUploadPage(),
         '/leaveApply': (_) => LeaveApplyPage(),

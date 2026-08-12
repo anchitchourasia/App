@@ -14,13 +14,16 @@ class HomePage extends StatefulWidget {
   static const Color _accentBlue = Color(0xFF2563EB);
 
   static const List<_MenuItem> _items = [
+    _MenuItem('My Profile', Icons.person, '/profile'),
+    _MenuItem('Pass System', Icons.directions_car, '/vehicleTracking'),
+    _MenuItem('Permission System', Icons.receipt_long, '/cvpsRequests'),
+
+    // Below items will stay visible but non-clickable
     _MenuItem('Attendance', Icons.event_available, '/attendance'),
     _MenuItem('Employees', Icons.groups_2, '/employees'),
-    _MenuItem('My Profile', Icons.person, '/profile'),
     _MenuItem('Settings', Icons.settings, '/settings'),
     _MenuItem('Insurance Upload', Icons.upload_file, '/insuranceUpload'),
     _MenuItem('Leave Apply', Icons.event_note, '/leaveApply'),
-    _MenuItem('Vehicle Tracking', Icons.directions_car, '/vehicleTracking'),
     _MenuItem('Self Service Portal', Icons.support_agent, '/selfServicePortal'),
     _MenuItem('Overtime Management', Icons.timelapse, '/overtimeManagement'),
     _MenuItem(
@@ -168,10 +171,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         ),
                     itemBuilder: (context, index) {
                       final item = HomePage._items[index];
+
+                      // Only these routes should be clickable
+                      final bool isEnabled =
+                          item.route == '/profile' ||
+                          item.route == '/vehicleTracking' ||
+                          item.route == '/cvpsRequests';
+
                       return _MenuCard(
                         title: item.title,
                         icon: item.icon,
-                        onTap: () => Navigator.pushNamed(context, item.route),
+                        isEnabled: isEnabled,
+                        onTap: isEnabled
+                            ? () => Navigator.pushNamed(context, item.route)
+                            : null, // disabled
                       );
                     },
                   ),
@@ -225,12 +238,14 @@ class _MenuItem {
 class _MenuCard extends StatelessWidget {
   final String title;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isEnabled;
 
   const _MenuCard({
     required this.title,
     required this.icon,
     required this.onTap,
+    required this.isEnabled,
   });
 
   static const Color _accentBlue = HomePage._accentBlue;
@@ -239,15 +254,29 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(18));
 
+    final Color borderColor = isEnabled ? Colors.black26 : Colors.black12;
+    final Color titleColor = isEnabled
+        ? _accentBlue
+        : _accentBlue.withOpacity(0.4);
+    final Color iconBg = _accentBlue.withAlpha(
+      isEnabled ? (0.12 * 255).round() : (0.05 * 255).round(),
+    );
+    final Color iconColor = isEnabled
+        ? _accentBlue
+        : _accentBlue.withOpacity(0.4);
+    final Color subtitleColor = _accentBlue.withAlpha(
+      isEnabled ? (0.75 * 255).round() : (0.30 * 255).round(),
+    );
+
     return Card(
       color: Colors.white,
-      elevation: 6,
-      shadowColor: Colors.black26,
+      elevation: isEnabled ? 6 : 2,
+      shadowColor: borderColor,
       shape: const RoundedRectangleBorder(borderRadius: radius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: radius,
-        onTap: onTap,
+        onTap: isEnabled ? onTap : null,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -256,29 +285,29 @@ class _MenuCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: _accentBlue.withAlpha((0.12 * 255).round()),
+                  color: iconBg,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: _accentBlue, size: 26),
+                child: Icon(icon, color: iconColor, size: 26),
               ),
               const Spacer(),
               Text(
                 title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _accentBlue,
+                style: TextStyle(
+                  color: titleColor,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Tap to open',
+                isEnabled ? 'Tap to open' : 'Coming soon',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: _accentBlue.withAlpha((0.75 * 255).round()),
+                  color: subtitleColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
