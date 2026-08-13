@@ -200,7 +200,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: const HegAppBar(title: 'CVPS Vehicle Permission Requests'),
+      appBar: const HegAppBar(title: 'Permission Requests'),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(

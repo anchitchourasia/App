@@ -10,9 +10,9 @@ class PassRegistryApi {
   static String get _apiKey => ApiConfig.apiKey;
 
   static Map<String, String> get _headers => {
-        'x-api-key': _apiKey,
-        // No need for Content-Type on GET
-      };
+    'x-api-key': _apiKey,
+    // No need for Content-Type on GET
+  };
 
   Future<List<PassRegistryItem>> fetchPassRegistry() async {
     final response = await http.get(Uri.parse(_passListV1), headers: _headers);
