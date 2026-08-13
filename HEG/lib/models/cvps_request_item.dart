@@ -48,34 +48,43 @@ class CvpsRequestItem {
     required this.vehicleDocumentCount,
   });
 
-  /// Factory that maps a CreateRequestDTO JSON into this row.
-  /// This is equivalent to mapToRow(dto: CreateRequestDTO) in the web code.
+  // ─────────────────────────────────────────────────────────
+  // Helper functions shared by both factories
+  // ─────────────────────────────────────────────────────────
+
+  static String _formatDate(dynamic value) {
+    if (value == null) return '';
+    final s = value.toString();
+    // Web splits on 'T', so do the same.
+    return s.split('T').first;
+  }
+
+  static String _normalizeStatus(dynamic status) {
+    final normalized = (status ?? '').toString().trim().toUpperCase();
+    switch (normalized) {
+      case 'DRAFT':
+        return 'SAVED';
+      case 'MODIFY':
+        return 'MODIFY';
+      case 'CREATED':
+        return 'SUBMITTED';
+      default:
+        return normalized;
+    }
+  }
+
+  /// Factory that maps a full CreateRequestDTO JSON into this row.
+  /// This is equivalent to mapToRow(dto: CreateRequestDTO) in the web list code.
+  ///
+  /// Expected shape:
+  /// {
+  ///   "request": { ... },
+  ///   "employees": [ ... ],
+  ///   "vehicleDocuments": [ ... ]
+  /// }
   factory CvpsRequestItem.fromCreateRequestDto(Map<String, dynamic> dto) {
     // request object inside CreateRequestDTO
     final req = dto['request'] as Map<String, dynamic>? ?? {};
-
-    // Helper to extract dates and keep only YYYY-MM-DD.
-    String formatDate(dynamic value) {
-      if (value == null) return '';
-      final s = value.toString();
-      // Web splits on 'T', so do the same.
-      return s.split('T').first;
-    }
-
-    // Web normalizeRequestStatus: DRAFT -> SAVED, CREATED -> SUBMITTED, etc.
-    String normalizeStatus(dynamic status) {
-      final normalized = (status ?? '').toString().trim().toUpperCase();
-      switch (normalized) {
-        case 'DRAFT':
-          return 'SAVED';
-        case 'MODIFY':
-          return 'MODIFY';
-        case 'CREATED':
-          return 'SUBMITTED';
-        default:
-          return normalized;
-      }
-    }
 
     // employees and vehicleDocuments arrays from DTO.
     final employees = dto['employees'] as List<dynamic>? ?? const [];
@@ -87,12 +96,45 @@ class CvpsRequestItem {
       vehicleNo: (req['vehicleNo'] ?? '').toString(),
       vehicleType: (req['vehicleType'] ?? '').toString(),
       natureOfJob: (req['natureOfJob'] ?? '').toString(),
-      permissionTo: formatDate(req['permissionTo']),
-      reqStatus: normalizeStatus(req['reqStatus']),
+      permissionTo: _formatDate(req['permissionTo']),
+      reqStatus: _normalizeStatus(req['reqStatus']),
       createdBy: (req['createdBy'] ?? '').toString(),
-      createdDate: formatDate(req['createdDate']),
+      createdDate: _formatDate(req['createdDate']),
       personnelCount: employees.length,
       vehicleDocumentCount: vehicleDocs.length,
+    );
+  }
+
+  /// Factory that maps a single request map (the inner `request` object)
+  /// into CvpsRequestItem. This is used by the pass page, which already
+  /// has `raw['request']` from CreateRequestDTO.
+  ///
+  /// Expected shape:
+  /// {
+  ///   "requestNo": ...,
+  ///   "contractorId": ...,
+  ///   "vehicleNo": ...,
+  ///   "vehicleType": ...,
+  ///   "natureOfJob": ...,
+  ///   "permissionTo": ...,
+  ///   "reqStatus": ...,
+  ///   "createdBy": ...,
+  ///   "createdDate": ...
+  /// }
+  factory CvpsRequestItem.fromRequestMap(Map<String, dynamic> req) {
+    return CvpsRequestItem(
+      requestNo: int.tryParse('${req['requestNo'] ?? 0}') ?? 0,
+      contractorCode: (req['contractorId'] ?? '').toString(),
+      vehicleNo: (req['vehicleNo'] ?? '').toString(),
+      vehicleType: (req['vehicleType'] ?? '').toString(),
+      natureOfJob: (req['natureOfJob'] ?? '').toString(),
+      permissionTo: _formatDate(req['permissionTo']),
+      reqStatus: _normalizeStatus(req['reqStatus']),
+      createdBy: (req['createdBy'] ?? '').toString(),
+      createdDate: _formatDate(req['createdDate']),
+      // counts are not needed on the pass screen
+      personnelCount: 0,
+      vehicleDocumentCount: 0,
     );
   }
 }

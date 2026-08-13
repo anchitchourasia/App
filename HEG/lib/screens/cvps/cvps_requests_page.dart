@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../../widgets/heg_app_bar.dart';
 import '../../data/cvps_api.dart';
 import '../../models/cvps_request_item.dart';
+// The list page no longer needs cvps_document, cvps_driver, cvps_history_entry,
+// or cvps_pass_pdf_service, because PDF is generated from CvpsPassPage.
+// Remove unused imports if they still exist.
 
 class CvpsRequestsPage extends StatefulWidget {
   const CvpsRequestsPage({super.key});
@@ -95,7 +98,6 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   }
 
   /// Applies search + status filters to allRows to produce filteredRows.
-  /// Mirrors filteredRows computed() in vehicle-permission-list.ts.
   void _applyFilters() {
     final search = searchText.trim().toLowerCase();
     final statusUpper = statusFilter.trim().toUpperCase();
@@ -138,7 +140,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     });
   }
 
-  /// Returns human-readable label for a status, same as getStatusLabel(status).
+  /// Returns human-readable label for a status.
   String _getStatusLabel(String status) {
     final normalized = status.trim().toUpperCase();
     switch (normalized) {
@@ -162,7 +164,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     }
   }
 
-  /// Returns a color for status badge, similar to getStatusClass/status colors.
+  /// Returns a color for status badge.
   Color _getStatusColor(String status) {
     final normalized = status.trim().toUpperCase();
     switch (normalized) {
@@ -186,12 +188,21 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   }
 
   /// When user taps View button on a row.
-  /// This should open a full CVPS form screen in view mode.
-  /// For now, we navigate to '/cvpsForm' with requestNo as argument.
+  /// Opens full CVPS form screen in view mode.
   void _viewRequest(CvpsRequestItem row) {
     Navigator.pushNamed(
       context,
-      '/cvpsForm', // you will define this route in main.dart
+      '/cvpsForm', // define this route in main.dart
+      arguments: row.requestNo,
+    );
+  }
+
+  /// Navigate to Pass UI screen for this request.
+  /// From that screen user can view pass and click Download/Print.
+  void _viewPass(CvpsRequestItem row) {
+    Navigator.pushNamed(
+      context,
+      '/cvpsPass', // define this route in main.dart
       arguments: row.requestNo,
     );
   }
@@ -404,8 +415,8 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     );
   }
 
-  /// Builds a single CVPS request card, same card style as Pass Registry.
-  /// Includes a View button that opens the form screen.
+  /// Builds a single CVPS request card.
+  /// Includes a View button and a View Pass button (when Approved).
   Widget _buildRequestCard(CvpsRequestItem row) {
     final badgeColor = _getStatusColor(row.reqStatus);
 
@@ -523,7 +534,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
               ],
             ),
             const SizedBox(height: 12),
-            // Action buttons (for now only View)
+            // Action buttons: View + View Pass (when Approved)
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -535,7 +546,14 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                   background: const Color(0xFFEAF2FF),
                   onTap: () => _viewRequest(row),
                 ),
-                // Later you can add Edit/Delete/Pass buttons here.
+                if (row.reqStatus.trim().toUpperCase() == 'APPROVED')
+                  _actionButton(
+                    label: 'View Pass',
+                    icon: Icons.picture_as_pdf_outlined,
+                    foreground: const Color(0xFF16A34A),
+                    background: const Color(0xFFEFFDF5),
+                    onTap: () => _viewPass(row),
+                  ),
               ],
             ),
           ],

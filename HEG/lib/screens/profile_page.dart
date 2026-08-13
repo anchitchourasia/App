@@ -78,6 +78,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await showModalBottomSheet<String?>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true, // ← IMPORTANT
       builder: (_) => _EditAvatarSheet(
         avatars: _dummyAvatars,
         initial: _avatarFor(user),

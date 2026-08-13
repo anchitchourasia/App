@@ -27,6 +27,7 @@ import 'screens/cvps/cvps_requests_page.dart';
 import 'screens/cvps/cvps_form_page.dart';
 // ✅ NEW: Applicants page
 import 'screens/applicants_page.dart';
+import 'screens/cvps/cvps_pass_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +67,11 @@ class MyApp extends StatelessWidget {
         '/profile': (_) => const ProfilePage(),
         '/cvpsRequests': (context) => const CvpsRequestsPage(),
         '/cvpsForm': (context) => const CvpsFormPage(), // to be implemented
+        '/cvpsPass': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments;
+          final requestNo = args as int;
+          return CvpsPassPage(requestNo: requestNo);
+        },
 
         '/insuranceUpload': (_) => InsuranceUploadPage(),
         '/leaveApply': (_) => LeaveApplyPage(),
