@@ -280,7 +280,7 @@ class PassDropdown extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(
-            value: value,
+            initialValue: value,
             isExpanded: true,
             decoration: InputDecoration(
               filled: true,
@@ -349,7 +349,7 @@ class PassDropdownSmall extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
         filled: true,

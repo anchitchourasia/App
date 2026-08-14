@@ -1,5 +1,6 @@
 /// CVPS Vehicle Permission list screen.
 /// Mirrors vehicle-permission-list.ts and uses same Pass Registry UI style.
+library;
 import 'package:flutter/material.dart';
 
 import '../../widgets/heg_app_bar.dart';
@@ -376,7 +377,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            value: statusOptions.contains(statusFilter) ? statusFilter : 'ALL',
+            initialValue: statusOptions.contains(statusFilter) ? statusFilter : 'ALL',
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Status',

@@ -1,7 +1,9 @@
 // lib/services/cvps_pass_pdf_service.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -32,23 +34,37 @@ class CvpsPassPdfService {
   }) async {
     final pdf = pw.Document();
 
+    // Load logos from Flutter assets
+    final Uint8List? securityLogoBytes = await _loadAssetBytes(
+      'assets/images/security.jpg',
+    );
+    final Uint8List? hegLogoBytes = await _loadAssetBytes(
+      'assets/images/heg_logo.jpg',
+    );
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(20),
         build: (context) => [
-          _buildHeader(formNo),
+          _buildHeader(formNo, securityLogoBytes, hegLogoBytes),
           pw.SizedBox(height: 12),
           _buildGeneralInfo(request, contractorName),
           pw.SizedBox(height: 12),
-          _buildVehicleDocsTable(vehicleDocuments),
+          _buildVehicleDocsTable(vehicleDocuments, request),
           pw.SizedBox(height: 12),
           _buildDriversTable(drivers),
-          pw.SizedBox(height: 20),
-          _buildSignaturesRow(request, contractorName, history),
-          pw.SizedBox(height: 10),
-          _buildFooter(),
         ],
+        footer: (context) {
+          return pw.Column(
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              _buildSignaturesRow(request, contractorName, history),
+              pw.SizedBox(height: 8),
+              _buildFooter(),
+            ],
+          );
+        },
       ),
     );
 
@@ -60,44 +76,137 @@ class CvpsPassPdfService {
     await OpenFilex.open(file.path);
   }
 
+  Future<Uint8List?> _loadAssetBytes(String path) async {
+    try {
+      final data = await rootBundle.load(path);
+      return data.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── HEADER ──────────────────────────────────────────────
 
-  pw.Widget _buildHeader(String formNo) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
-      children: [
-        pw.Text(
-          'VENDORS VEHICLE/CONTRACTOR PERMISSION FORM',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          textAlign: pw.TextAlign.center,
-        ),
-        pw.SizedBox(height: 4),
-        pw.Text(
-          'HEG LIMITED, MANDIDEEP',
-          style: const pw.TextStyle(fontSize: 10),
-          textAlign: pw.TextAlign.center,
-        ),
-        pw.SizedBox(height: 4),
-        pw.Text(
-          formNo,
-          style: const pw.TextStyle(fontSize: 9),
-          textAlign: pw.TextAlign.center,
-        ),
-      ],
+  pw.Widget _buildHeader(
+    String formNo,
+    Uint8List? securityLogoBytes,
+    Uint8List? hegLogoBytes,
+  ) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(vertical: 8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          // Left: Security logo
+          pw.Container(
+            width: 40,
+            height: 40,
+            alignment: pw.Alignment.center,
+            child: securityLogoBytes != null
+                ? pw.Image(
+                    pw.MemoryImage(securityLogoBytes),
+                    fit: pw.BoxFit.contain,
+                  )
+                : pw.Text(
+                    'SECURITY',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
+          ),
+
+          // Center: Title + subtitle
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text(
+                  'VENDORS VEHICLE/CONTRACTOR PERMISSION FORM',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+                pw.SizedBox(height: 2),
+                pw.Text(
+                  'HEG LIMITED, MANDIDEEP',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.normal,
+                  ),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+
+          // Right: HEG logo
+          pw.Container(
+            width: 40,
+            height: 40,
+            alignment: pw.Alignment.center,
+            child: hegLogoBytes != null
+                ? pw.Image(pw.MemoryImage(hegLogoBytes), fit: pw.BoxFit.contain)
+                : pw.Text(
+                    'HEG',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                    textAlign: pw.TextAlign.center,
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
   // ── GENERAL INFO ────────────────────────────────────────
 
   pw.Widget _buildGeneralInfo(CvpsRequestItem req, String contractorName) {
+    final contractorDisplay = contractorName.isEmpty
+        ? (req.contractorCode.isEmpty ? '-' : req.contractorCode)
+        : '$contractorName (${req.contractorCode.isEmpty ? '-' : req.contractorCode})';
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'General Information',
-          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+        // Section title row with form chip
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'General Information',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              decoration: pw.BoxDecoration(
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                border: pw.Border.all(color: PdfColors.grey500, width: 0.5),
+              ),
+              child: pw.Text(
+                'W-OHS-SECURITY-12',
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
         pw.SizedBox(height: 6),
+
         pw.Table(
           border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
           columnWidths: const {
@@ -108,7 +217,7 @@ class CvpsPassPdfService {
           children: [
             _infoRow(
               'Contractor Name (Code)',
-              '$contractorName (${req.contractorCode.isEmpty ? '-' : req.contractorCode})',
+              contractorDisplay,
               'Request Date',
               _fmtDate(req.createdDate),
               'Nature of Job',
@@ -165,9 +274,20 @@ class CvpsPassPdfService {
     );
   }
 
+  // ── VEHICLE DETAILS TITLE ───────────────────────────────
+
+  String _vehicleDetailsTitle(CvpsRequestItem req) {
+    final vehicleNo = req.vehicleNo.isEmpty ? '-' : req.vehicleNo.trim();
+    final vehicleType = req.vehicleType.isEmpty ? '-' : req.vehicleType.trim();
+    return 'Vehicle Details ($vehicleNo, $vehicleType)';
+  }
+
   // ── VEHICLE DOCUMENTS TABLE ─────────────────────────────
 
-  pw.Widget _buildVehicleDocsTable(List<CvpsDocument> docs) {
+  pw.Widget _buildVehicleDocsTable(
+    List<CvpsDocument> docs,
+    CvpsRequestItem req,
+  ) {
     final data = docs
         .map(
           (d) => [
@@ -183,7 +303,7 @@ class CvpsPassPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Vehicle Documents',
+          _vehicleDetailsTitle(req),
           style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 6),
@@ -283,32 +403,38 @@ class CvpsPassPdfService {
     String contractorName,
     List<CvpsHistoryEntry> history,
   ) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    return pw.Column(
       children: [
-        _signatureBlock(
-          name: contractorName.isEmpty ? '-' : contractorName,
-          code: req.contractorCode.isEmpty ? '-' : req.contractorCode,
-          dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
-          role: 'contractor name',
-        ),
-        _signatureBlock(
-          name: _stageName(history, 'UPLOADER'),
-          code: _stageEmpCode(history, 'UPLOADER'),
-          dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
-          role: 'uploader',
-        ),
-        _signatureBlock(
-          name: _stageName(history, 'CONFIRMER'),
-          code: _stageEmpCode(history, 'CONFIRMER'),
-          dateText: _fmtDate(_latestStageDate(history, 'CONFIRMER') ?? ''),
-          role: 'confirmer',
-        ),
-        _signatureBlock(
-          name: _stageName(history, 'APPROVER'),
-          code: _stageEmpCode(history, 'APPROVER'),
-          dateText: _fmtDate(_latestStageDate(history, 'APPROVER') ?? ''),
-          role: 'approver',
+        pw.Divider(color: PdfColors.grey300),
+        pw.SizedBox(height: 6),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _signatureBlock(
+              name: contractorName.isEmpty ? '-' : contractorName,
+              code: req.contractorCode.isEmpty ? '-' : req.contractorCode,
+              dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
+              role: 'contractor name',
+            ),
+            _signatureBlock(
+              name: _stageName(history, 'UPLOADER'),
+              code: _stageEmpCode(history, 'UPLOADER'),
+              dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
+              role: 'uploader',
+            ),
+            _signatureBlock(
+              name: _stageName(history, 'CONFIRMER'),
+              code: _stageEmpCode(history, 'CONFIRMER'),
+              dateText: _fmtDate(_latestStageDate(history, 'CONFIRMER') ?? ''),
+              role: 'confirmer',
+            ),
+            _signatureBlock(
+              name: _stageName(history, 'APPROVER'),
+              code: _stageEmpCode(history, 'APPROVER'),
+              dateText: _fmtDate(_latestStageDate(history, 'APPROVER') ?? ''),
+              role: 'approver',
+            ),
+          ],
         ),
       ],
     );

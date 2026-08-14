@@ -534,7 +534,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     void Function(String?) onChanged,
   ) {
     return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : items.first,
+      initialValue: items.contains(value) ? value : items.first,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,

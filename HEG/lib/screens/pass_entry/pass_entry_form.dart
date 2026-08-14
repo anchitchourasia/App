@@ -512,7 +512,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     final request = _buildRequest(statusOverride: statusToUse);
     final jsonPart = jsonEncode(request.toJson());
 
-    Future<http.Response> _sendMultipart() async {
+    Future<http.Response> sendMultipart() async {
       if (_registryId != null) {
         final formData = http.MultipartRequest(
           'PUT',
@@ -580,7 +580,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
     }
 
     try {
-      final response = await _sendMultipart();
+      final response = await sendMultipart();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body) as Map;

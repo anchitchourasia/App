@@ -251,7 +251,7 @@ class _PassStickerPageState extends State<PassStickerPage> {
       final bytes = byteData.buffer.asUint8List();
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/sticker_${_passNo}.png');
+      final file = File('${dir.path}/sticker_$_passNo.png');
       await file.writeAsBytes(bytes);
 
       await Share.shareXFiles([

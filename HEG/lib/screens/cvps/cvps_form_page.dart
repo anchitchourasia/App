@@ -232,7 +232,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       try {
         final history = await api.fetchRequestHistory(no);
         remarksHistory = history.map((raw) {
-          final m = raw as Map<String, dynamic>;
+          final m = raw;
           return _WorkflowRemarkEntry(
             stage: _safeString(m['stage']),
             action: _safeString(m['actionTaken']),

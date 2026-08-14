@@ -20,8 +20,6 @@ import 'screens/self_service_portal_page.dart';
 import 'screens/overtime_management_page.dart';
 import 'screens/manpower_dashboard_page.dart';
 import 'screens/notifications_page.dart';
-import 'data/session_store.dart';
-import 'screens/vehicle_tracking_page.dart';
 import 'screens/approver/approver_menu_page.dart';
 import 'screens/cvps/cvps_requests_page.dart';
 import 'screens/cvps/cvps_form_page.dart';

@@ -106,6 +106,7 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
 
   Future<void> _downloadPass() async {
     if (_request == null) return;
+    print('DEBUG: View CvpsPassPage _downloadPass for ${_request!.requestNo}');
     try {
       await _passPdfService.generateAndOpenPassPdf(
         request: _request!,
@@ -537,38 +538,50 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
   }
 
   Widget _grid2(List<Widget> fields) {
-    final left = <Widget>[];
-    final right = <Widget>[];
-    for (var i = 0; i < fields.length; i++) {
-      (i % 2 == 0 ? left : right).add(fields[i]);
+    final rows = <Widget>[];
+
+    for (int i = 0; i < fields.length; i += 2) {
+      final hasRightField = i + 1 < fields.length;
+
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: fields[i]),
+              const SizedBox(width: 16),
+              Expanded(child: hasRightField ? fields[i + 1] : const SizedBox()),
+            ],
+          ),
+        ),
+      );
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: Column(children: left)),
-        const SizedBox(width: 24),
-        Expanded(child: Column(children: right)),
-      ],
-    );
+
+    return Column(children: rows);
   }
 
   Widget _field(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
           ),
-          const SizedBox(height: 3),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        ),
+        const SizedBox(height: 4),
+
+        // Makes every value box exactly the full width of its grid column.
+        SizedBox(
+          width: double.infinity,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 34),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               color: const Color(0xFFF8F9FA),
               borderRadius: BorderRadius.circular(8),
@@ -576,6 +589,8 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
             ),
             child: Text(
               value.isEmpty ? '-' : value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -583,8 +598,8 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

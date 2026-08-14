@@ -1,7 +1,6 @@
 // lib/screens/approver/approver_pending_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../data/session_store.dart';
 import '../../data/pass_registry_api.dart';
 import '../../models/pass_registry_item.dart';
 import '../../widgets/heg_app_bar.dart';
