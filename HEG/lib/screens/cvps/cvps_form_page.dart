@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/cvps_api.dart';
 import '../../widgets/heg_app_bar.dart';
+import 'driver_details_sheet.dart';
 
 /// Local model for a vehicle document row (view only).
 /// Mirrors DocEntry in vehicle-permission-form.ts, but simplified.
@@ -30,13 +31,67 @@ class _DriverPerson {
   final String eyeTestDate;
   final String? eyeTestFileName;
 
+  // New: used only by the read-only View More sheet.
+  final String mobileNo;
+  final String aadhaarNo;
+  final String licenseNo;
+  final String licenseType;
+  final String licenseFrom;
+  final String licenseTo;
+  final String aadhaarFileName;
+  final String photoFileName;
+  final String licenseFileName;
+
   _DriverPerson({
     required this.role,
     required this.empNo,
     required this.name,
     required this.eyeTestDate,
     required this.eyeTestFileName,
+    this.mobileNo = '',
+    this.aadhaarNo = '',
+    this.licenseNo = '',
+    this.licenseType = '',
+    this.licenseFrom = '',
+    this.licenseTo = '',
+    this.aadhaarFileName = '',
+    this.photoFileName = '',
+    this.licenseFileName = '',
   });
+
+  _DriverPerson copyWith({
+    String? role,
+    String? empNo,
+    String? name,
+    String? eyeTestDate,
+    String? eyeTestFileName,
+    String? mobileNo,
+    String? aadhaarNo,
+    String? licenseNo,
+    String? licenseType,
+    String? licenseFrom,
+    String? licenseTo,
+    String? aadhaarFileName,
+    String? photoFileName,
+    String? licenseFileName,
+  }) {
+    return _DriverPerson(
+      role: role ?? this.role,
+      empNo: empNo ?? this.empNo,
+      name: name ?? this.name,
+      eyeTestDate: eyeTestDate ?? this.eyeTestDate,
+      eyeTestFileName: eyeTestFileName ?? this.eyeTestFileName,
+      mobileNo: mobileNo ?? this.mobileNo,
+      aadhaarNo: aadhaarNo ?? this.aadhaarNo,
+      licenseNo: licenseNo ?? this.licenseNo,
+      licenseType: licenseType ?? this.licenseType,
+      licenseFrom: licenseFrom ?? this.licenseFrom,
+      licenseTo: licenseTo ?? this.licenseTo,
+      aadhaarFileName: aadhaarFileName ?? this.aadhaarFileName,
+      photoFileName: photoFileName ?? this.photoFileName,
+      licenseFileName: licenseFileName ?? this.licenseFileName,
+    );
+  }
 }
 
 /// Local model for workflow remark history (view only).
@@ -133,6 +188,35 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     }
   }
 
+  void _openDriverDetails(_DriverPerson driver) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return DriverDetailsSheet(
+          api: api,
+          driver: DriverDetailsData(
+            role: driver.role,
+            empNo: driver.empNo,
+            name: driver.name,
+            eyeTestDate: driver.eyeTestDate,
+            eyeTestFileName: driver.eyeTestFileName ?? '',
+            mobileNo: driver.mobileNo,
+            aadhaarNo: driver.aadhaarNo,
+            licenseNo: driver.licenseNo,
+            licenseType: driver.licenseType,
+            licenseFrom: driver.licenseFrom,
+            licenseTo: driver.licenseTo,
+            aadhaarFileName: driver.aadhaarFileName,
+            photoFileName: driver.photoFileName,
+            licenseFileName: driver.licenseFileName,
+          ),
+        );
+      },
+    );
+  }
+
   /// Downloads an Eye Test file for a driver.
   Future<void> _downloadEyeTest(_DriverPerson p) async {
     final fileName = p.eyeTestFileName;
@@ -144,22 +228,17 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     }
 
     try {
-      final Uint8List bytes =
-          await api.downloadDocumentBytes(fileName);
+      final Uint8List bytes = await api.downloadDocumentBytes(fileName);
       final mime = api.guessMimeType(fileName);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Downloaded $fileName ($mime, ${bytes.length} bytes)',
-          ),
+          content: Text('Downloaded $fileName ($mime, ${bytes.length} bytes)'),
         ),
       );
       // TODO: save bytes to temp file and open with open_file or share_plus.
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to download $fileName: $e'),
-        ),
+        SnackBar(content: Text('Failed to download $fileName: $e')),
       );
     }
   }
@@ -176,24 +255,18 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
 
     try {
       final fileName = d.existingFile!;
-      final Uint8List bytes =
-          await api.downloadDocumentBytes(fileName);
+      final Uint8List bytes = await api.downloadDocumentBytes(fileName);
       final mime = api.guessMimeType(fileName);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Downloaded $fileName ($mime, ${bytes.length} bytes)',
-          ),
+          content: Text('Downloaded $fileName ($mime, ${bytes.length} bytes)'),
         ),
       );
       // TODO: save bytes to temp file and open with open_file or share_plus.
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Failed to download ${d.existingFile}: $e'),
-        ),
+        SnackBar(content: Text('Failed to download ${d.existingFile}: $e')),
       );
     }
   }
@@ -214,13 +287,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       // 2) Contractor BP details: cvps.fetchContractorDetails(contractorCode)
       if (contractorIdRaw.isNotEmpty) {
         try {
-          final bp =
-              await api.fetchContractorDetails(contractorIdRaw);
+          final bp = await api.fetchContractorDetails(contractorIdRaw);
           if (bp != null) {
             final bpCode = _safeString(bp['contractorCode']);
             final bpName = _safeString(bp['contractorName']);
-            contractorCode =
-                bpCode.isNotEmpty ? bpCode : contractorCode;
+            contractorCode = bpCode.isNotEmpty ? bpCode : contractorCode;
             contractorName = bpName;
           }
         } catch (_) {
@@ -245,9 +316,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
 
         // Sort by createdAt ascending (same as TS).
         remarksHistory.sort((a, b) {
-          final ta = DateTime.tryParse(a.createdAt) ??
+          final ta =
+              DateTime.tryParse(a.createdAt) ??
               DateTime.fromMillisecondsSinceEpoch(0);
-          final tb = DateTime.tryParse(b.createdAt) ??
+          final tb =
+              DateTime.tryParse(b.createdAt) ??
               DateTime.fromMillisecondsSinceEpoch(0);
           return ta.compareTo(tb);
         });
@@ -272,18 +345,15 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
   /// Mirrors core of fillForm(dto) in vehicle-permission-form.ts.
   void _fillFromDto(Map<String, dynamic> data) {
     final req = data['request'] as Map<String, dynamic>? ?? {};
-    final vehicleDocs =
-        data['vehicleDocuments'] as List<dynamic>? ?? const [];
-    final employees =
-        data['employees'] as List<dynamic>? ?? const [];
+    final vehicleDocs = data['vehicleDocuments'] as List<dynamic>? ?? const [];
+    final employees = data['employees'] as List<dynamic>? ?? const [];
 
     // Status (raw backend status).
     final rawStatus = (req['reqStatus'] ?? '').toString().trim();
     status = rawStatus.isEmpty ? 'Draft' : rawStatus;
 
     // General section
-    contractorIdRaw =
-        _safeString(req['contractorId']).toUpperCase();
+    contractorIdRaw = _safeString(req['contractorId']).toUpperCase();
     contractorCode = contractorIdRaw; // before BP lookup
     contractorName = ''; // will be filled via BP API
     department = _safeString(req['department']);
@@ -294,17 +364,14 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     createdDate = _formatDate(req['createdDate']);
 
     // Vehicle section
-    vehicleNumber =
-        _safeString(req['vehicleNo']).toUpperCase();
+    vehicleNumber = _safeString(req['vehicleNo']).toUpperCase();
     vehicleType = _safeString(req['vehicleType']);
 
     // Documents section – use same filename logic as TS getExistingFileName.
     docs = vehicleDocs.map((raw) {
       final m = raw as Map<String, dynamic>? ?? {};
-      final docType =
-          _safeString(m['documentType']).trim();
-      final docNo =
-          _safeString(m['documentNo']).trim();
+      final docType = _safeString(m['documentType']).trim();
+      final docNo = _safeString(m['documentNo']).trim();
       final validTill = _formatDate(m['validTill']);
       final fileName = _extractExistingFileName(m);
       return _DocEntry(
@@ -318,50 +385,98 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     // Drivers section – simplified Eye Test mapping.
     drivers = employees.map((rawEmp) {
       final emp = rawEmp as Map<String, dynamic>? ?? {};
-      final docsList =
-          emp['documents'] as List<dynamic>? ?? const [];
+      final docsList = emp['documents'] as List<dynamic>? ?? const [];
 
       // Find Eye Test document.
       Map<String, dynamic>? eyeDoc;
       for (final d in docsList) {
         final dm = d as Map<String, dynamic>? ?? {};
-        final t = _safeString(dm['documentType'])
-            .toUpperCase()
-            .replaceAll(' ', '');
-        if (t == 'EYETEST' ||
-            t == 'EYE_TEST' ||
-            t == 'EYETESTDOC') {
+        final t = _safeString(
+          dm['documentType'],
+        ).toUpperCase().replaceAll(' ', '');
+        if (t == 'EYETEST' || t == 'EYE_TEST' || t == 'EYETESTDOC') {
           eyeDoc = dm;
           break;
         }
       }
 
-      final eyeFileRaw = eyeDoc?['filename'] ??
+      final eyeFileRaw =
+          eyeDoc?['filename'] ??
           eyeDoc?['fileName'] ??
           eyeDoc?['documentName'] ??
           eyeDoc?['documentPath'];
       final eyeDateRaw =
-          emp['eyeTestDate'] ??
-              emp['eyetestdate'] ??
-              eyeDoc?['validTill'];
+          emp['eyeTestDate'] ?? emp['eyetestdate'] ?? eyeDoc?['validTill'];
 
       final eyeFileName = eyeFileRaw == null
           ? null
           : _stripPath(eyeFileRaw.toString());
 
+      Map<String, dynamic>? aadhaarDoc;
+      Map<String, dynamic>? licenseDoc;
+      Map<String, dynamic>? photoDoc;
+
+      for (final d in docsList) {
+        final dm = d as Map<String, dynamic>? ?? {};
+        final docType = _safeString(
+          dm['documentType'],
+        ).toUpperCase().replaceAll(' ', '_');
+
+        if (['AADHAAR', 'AADHAR', 'ADHAR', 'AADHAAR_CARD'].contains(docType)) {
+          aadhaarDoc = dm;
+        }
+
+        if (['DL', 'LICENSE', 'DRIVING_LICENSE'].contains(docType)) {
+          licenseDoc = dm;
+        }
+
+        if (['PHOTO', 'DRIVER_PHOTO', 'PHOTOGRAPH'].contains(docType)) {
+          photoDoc = dm;
+        }
+      }
+
       return _DriverPerson(
         role: _safeString(emp['empJob']),
         empNo: _safeString(emp['empNo']),
-        name: _safeString(emp['name']),
+        name: _safeString(
+          emp['empName'] ??
+              emp['EMP_NAME'] ??
+              emp['name'] ??
+              emp['NAME'] ??
+              emp['employeeName'],
+        ),
         eyeTestDate: _formatDate(eyeDateRaw),
         eyeTestFileName: eyeFileName,
+
+        mobileNo: _safeString(
+          emp['mobileNo'] ?? emp['mobile'] ?? emp['phoneNo'] ?? emp['phone'],
+        ),
+        aadhaarNo: _safeString(
+          emp['aadhaarNo'] ?? emp['aadharNo'] ?? aadhaarDoc?['documentNo'],
+        ),
+        licenseNo: _safeString(
+          emp['licenseNo'] ?? emp['licenseNumber'] ?? licenseDoc?['documentNo'],
+        ),
+        licenseType: _safeString(emp['licenseType'] ?? emp['dlType']),
+        licenseFrom: _formatDate(
+          emp['licenseFrom'] ??
+              emp['licenseValidFrom'] ??
+              licenseDoc?['validFrom'],
+        ),
+        licenseTo: _formatDate(
+          emp['licenseTo'] ?? emp['licenseValidTo'] ?? licenseDoc?['validTill'],
+        ),
+        aadhaarFileName: _extractExistingFileName(aadhaarDoc ?? {}),
+        photoFileName: _extractExistingFileName(photoDoc ?? {}),
+        licenseFileName: _extractExistingFileName(licenseDoc ?? {}),
       );
     }).toList();
   }
 
   /// Same behavior as TS getExistingFileName: use filename/fileName/documentName/documentPath and strip path.
   String _extractExistingFileName(Map<String, dynamic> m) {
-    final raw = m['filename'] ??
+    final raw =
+        m['filename'] ??
         m['fileName'] ??
         m['documentName'] ??
         m['documentPath'];
@@ -376,8 +491,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     return parts.isNotEmpty ? parts.last : s;
   }
 
-  String _safeString(dynamic value) =>
-      value == null ? '' : value.toString();
+  String _safeString(dynamic value) => value == null ? '' : value.toString();
 
   String _formatDate(dynamic value) {
     if (value == null) return '';
@@ -397,36 +511,34 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
-      appBar: HegAppBar(title: 'CVPS Request #$no'),
+      appBar: HegAppBar(title: 'CVPS Request $no'),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : hasError
-              ? _buildErrorView()
-              : SafeArea(
-                  child: SingleChildScrollView(
-                    padding:
-                        const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        _buildHeaderCard(),
-                        const SizedBox(height: 12),
-                        _buildGeneralSection(),
-                        const SizedBox(height: 12),
-                        _buildVehicleSection(),
-                        const SizedBox(height: 12),
-                        _buildDocumentsSection(),
-                        const SizedBox(height: 12),
-                        _buildDriversSection(),
-                        const SizedBox(height: 12),
-                        _buildWorkflowSection(),
-                        const SizedBox(height: 16),
-                        _buildFooterActions(),
-                      ],
-                    ),
-                  ),
+          ? _buildErrorView()
+          : SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeaderCard(),
+                    const SizedBox(height: 12),
+                    _buildGeneralSection(),
+                    const SizedBox(height: 12),
+                    _buildVehicleSection(),
+                    const SizedBox(height: 12),
+                    _buildDocumentsSection(),
+                    const SizedBox(height: 12),
+                    _buildDriversSection(),
+                    const SizedBox(height: 12),
+                    _buildWorkflowSection(),
+                    const SizedBox(height: 16),
+                    _buildFooterActions(),
+                  ],
                 ),
+              ),
+            ),
     );
   }
 
@@ -438,8 +550,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: const Color(0xFFE5EAF2)),
+        border: Border.all(color: const Color(0xFFE5EAF2)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D000000),
@@ -449,20 +560,17 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         ],
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
                   color: const Color(0xFFEAF2FF),
-                  borderRadius:
-                      BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
                   Icons.local_shipping_outlined,
@@ -473,28 +581,22 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
               const SizedBox(width: 10),
               const Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Contractor Vehicle Permission Form',
                       maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w800,
                         color: Color(0xFF102A43),
                       ),
                     ),
                     SizedBox(height: 2),
                     Text(
                       'HEG Limited, Mandideep',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF64748B),
-                      ),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                     ),
                   ],
                 ),
@@ -505,15 +607,10 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           Wrap(
             spacing: 10,
             runSpacing: 8,
-            crossAxisAlignment:
-                WrapCrossAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _pill(status,
-                  const Color(0xFFEFF6FF),
-                  const Color(0xFF1D4ED8)),
-              _pill(formNo,
-                  const Color(0xFFF1F5F9),
-                  const Color(0xFF334155)),
+              _pill(status, const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
+              _pill(formNo, const Color(0xFFF1F5F9), const Color(0xFF334155)),
             ],
           ),
         ],
@@ -532,8 +629,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: const Color(0xFFE5EAF2)),
+        border: Border.all(color: const Color(0xFFE5EAF2)),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
@@ -543,8 +639,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         ],
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
@@ -595,8 +690,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       title: 'Required Documents',
       children: [
         Row(
-          mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               '${docs.length} document(s)',
@@ -620,16 +714,10 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         if (docs.isEmpty)
           const Text(
             'No documents available.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF9CA3AF),
-            ),
+            style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
           )
         else
-          Column(
-            children:
-                docs.map(_buildDocCard).toList(),
-          ),
+          Column(children: docs.map(_buildDocCard).toList()),
       ],
     );
   }
@@ -642,16 +730,13 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 d.docType.isEmpty ? '—' : d.docType,
@@ -662,9 +747,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
                 ),
               ),
               Text(
-                d.validUpto.isEmpty
-                    ? ''
-                    : 'Valid upto: ${d.validUpto}',
+                d.validUpto.isEmpty ? '' : 'Valid upto: ${d.validUpto}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFF6B7280),
@@ -675,9 +758,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            d.docNo.isEmpty
-                ? 'Doc No: —'
-                : 'Doc No: ${d.docNo}',
+            d.docNo.isEmpty ? 'Doc No: —' : 'Doc No: ${d.docNo}',
             style: const TextStyle(
               fontSize: 12,
               color: Color(0xFF374151),
@@ -685,45 +766,32 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
             ),
           ),
           const SizedBox(height: 4),
-          if (d.existingFile != null &&
-              d.existingFile!.isNotEmpty)
+          if (d.existingFile != null && d.existingFile!.isNotEmpty)
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
                     'File: ${d.existingFile}',
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFF2563EB),
-                      decoration:
-                          TextDecoration.underline,
+                      decoration: TextDecoration.underline,
                     ),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: () => _downloadDoc(d),
-                  icon: const Icon(
-                    Icons.download,
-                    size: 16,
-                  ),
-                  label: const Text(
-                    'Download',
-                    style: TextStyle(fontSize: 11),
-                  ),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Download', style: TextStyle(fontSize: 11)),
                 ),
               ],
             )
           else
             const Text(
               'File: Not uploaded',
-              style: TextStyle(
-                fontSize: 11,
-                color: Color(0xFF9CA3AF),
-              ),
+              style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
             ),
         ],
       ),
@@ -738,17 +806,12 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         if (drivers.isEmpty)
           const Text(
             'No driver/crew details available.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF9CA3AF),
-            ),
+            style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
           )
         else
           Column(
             children: [
-              for (var i = 0;
-                  i < drivers.length;
-                  i++)
+              for (var i = 0; i < drivers.length; i++)
                 _buildDriverCard(drivers[i], i),
             ],
           ),
@@ -764,16 +827,13 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       decoration: BoxDecoration(
         color: const Color(0xFFFDFDFD),
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding:
-                const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               'Person ${index + 1}',
               style: const TextStyle(
@@ -787,13 +847,12 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           _valueField('Employee Code', p.empNo),
           _valueField('Name', p.name),
           _valueField('Eye Test Date', p.eyeTestDate),
-          // Eye Test File with download button
+
+          // Existing Eye Test File section.
           Padding(
-            padding:
-                const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: 10),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Eye Test File',
@@ -804,40 +863,28 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                if (p.eyeTestFileName != null &&
-                    p.eyeTestFileName!.isNotEmpty)
+                if (p.eyeTestFileName != null && p.eyeTestFileName!.isNotEmpty)
                   Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
                           p.eyeTestFileName!,
-                          overflow:
-                              TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 13,
-                            fontWeight:
-                                FontWeight.w700,
+                            fontWeight: FontWeight.w700,
                             color: Color(0xFF2563EB),
-                            decoration:
-                                TextDecoration
-                                    .underline,
+                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
                       TextButton.icon(
-                        onPressed: () =>
-                            _downloadEyeTest(p),
-                        icon: const Icon(
-                          Icons.download,
-                          size: 16,
-                        ),
+                        onPressed: () => _downloadEyeTest(p),
+                        icon: const Icon(Icons.download, size: 16),
                         label: const Text(
                           'Download',
-                          style: TextStyle(
-                              fontSize: 11),
+                          style: TextStyle(fontSize: 11),
                         ),
                       ),
                     ],
@@ -845,32 +892,38 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
                 else
                   Container(
                     width: double.infinity,
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                                horizontal: 12,
-                                vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      color:
-                          const Color(0xFFF8FAFC),
-                      borderRadius:
-                          BorderRadius.circular(
-                              10),
-                      border: Border.all(
-                          color: const Color(
-                              0xFFE2E8F0)),
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     child: const Text(
                       'No file uploaded',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight:
-                            FontWeight.w700,
+                        fontWeight: FontWeight.w700,
                         color: Color(0xFF9CA3AF),
                       ),
                     ),
                   ),
               ],
+            ),
+          ),
+
+          // New: matches web Driver Information -> View More behavior.
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _openDriverDetails(p),
+              icon: const Icon(Icons.visibility_outlined, size: 17),
+              label: const Text(
+                'View More',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ],
@@ -884,8 +937,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       title: 'Workflow Remarks',
       children: [
         Row(
-          mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               '${remarksHistory.length} remark(s)',
@@ -898,17 +950,13 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
             TextButton.icon(
               onPressed: () {
                 setState(() {
-                  showWorkflowHistory =
-                      !showWorkflowHistory;
+                  showWorkflowHistory = !showWorkflowHistory;
                 });
               },
               icon: const Icon(Icons.history, size: 16),
               label: Text(
-                showWorkflowHistory
-                    ? 'Hide History'
-                    : 'History',
-                style: const TextStyle(
-                    fontSize: 12),
+                showWorkflowHistory ? 'Hide History' : 'History',
+                style: const TextStyle(fontSize: 12),
               ),
             ),
           ],
@@ -917,48 +965,34 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         if (!showWorkflowHistory)
           const Text(
             'Tap History to view approval remarks.',
-            style: TextStyle(
-              fontSize: 11,
-              color: Color(0xFF9CA3AF),
-            ),
+            style: TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
           )
         else if (remarksHistory.isEmpty)
           const Text(
             'No workflow remarks available yet.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF9CA3AF),
-            ),
+            style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
           )
         else
-          Column(
-            children: remarksHistory
-                .map(_buildWorkflowCard)
-                .toList(),
-          ),
+          Column(children: remarksHistory.map(_buildWorkflowCard).toList()),
       ],
     );
   }
 
   /// Single workflow remark card (stage + action + remark).
-  Widget _buildWorkflowCard(
-      _WorkflowRemarkEntry r) {
+  Widget _buildWorkflowCard(_WorkflowRemarkEntry r) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 '${r.stage} - ${r.action}',
@@ -970,28 +1004,19 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
               ),
               Text(
                 r.createdAt,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF6B7280),
-                ),
+                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             '${r.byName} (${r.byEmpCode})',
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF6B7280),
-            ),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
           ),
           const SizedBox(height: 6),
           Text(
             r.remark.isEmpty ? '—' : r.remark,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF111827),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF111827)),
           ),
         ],
       ),
@@ -1000,13 +1025,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
 
   /// Generic read-only label + value chip.
   Widget _valueField(String label, String value) {
-    final display =
-        value.trim().isEmpty ? '-' : value.trim();
+    final display = value.trim().isEmpty ? '-' : value.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
@@ -1019,15 +1042,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           const SizedBox(height: 4),
           Container(
             width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              borderRadius:
-                  BorderRadius.circular(10),
-              border: Border.all(
-                  color: const Color(0xFFE2E8F0)),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Text(
               display,
@@ -1043,17 +1062,13 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     );
   }
 
-  Widget _pill(
-      String text, Color background, Color foreground) {
+  Widget _pill(String text, Color background, Color foreground) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: background,
-        borderRadius:
-            BorderRadius.circular(999),
-        border: Border.all(
-            color: foreground.withOpacity(0.15)),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: foreground.withOpacity(0.15)),
       ),
       child: Text(
         text,
@@ -1074,22 +1089,16 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           child: OutlinedButton(
             onPressed: () => Navigator.pop(context),
             style: OutlinedButton.styleFrom(
-              foregroundColor:
-                  const Color(0xFF0B1E3A),
-              side: const BorderSide(
-                  color: Color(0xFFC8D3E1)),
-              padding:
-                  const EdgeInsets.symmetric(
-                      vertical: 14),
+              foregroundColor: const Color(0xFF0B1E3A),
+              side: const BorderSide(color: Color(0xFFC8D3E1)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: const Text(
               'Close',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700),
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -1105,10 +1114,8 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(14),
-            border: Border.all(
-                color: const Color(0xFFD9E2EC)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFD9E2EC)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1144,8 +1151,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
                     ? null
                     : () => _loadRequest(requestNo!),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      const Color(0xFF0B1E3A),
+                  backgroundColor: const Color(0xFF0B1E3A),
                   foregroundColor: Colors.white,
                   elevation: 0,
                 ),

@@ -83,6 +83,59 @@ class CvpsApi {
     }
   }
 
+  /// GET /api/manpower/documents/{empNo}
+  /// Mirrors Angular: cvps.fetchManpowerDocuments(empNo).
+  ///
+  /// Used only by the Driver Information "View More" dialog.
+  /// It does not change CVPS request data, workflow, or payload.
+  Future<Map<String, dynamic>?> fetchManpowerDocuments(String empNo) async {
+    final code = empNo.trim();
+
+    if (code.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.parse(
+      '${ApiConfig.cvpsBaseUrl}/api/manpower/documents/'
+      '${Uri.encodeComponent(code)}',
+    );
+
+    final response = await client
+        .get(
+          uri,
+          headers: {
+            'x-api-key': ApiConfig.apiKey,
+            'Accept': 'application/json',
+          },
+        )
+        .timeout(const Duration(milliseconds: 12000));
+
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+
+      if (body is Map<String, dynamic>) {
+        final nestedData = body['data'];
+
+        if (nestedData is Map<String, dynamic>) {
+          return nestedData;
+        }
+
+        return body;
+      }
+
+      return null;
+    }
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    throw Exception(
+      'Unable to load driver details '
+      '(HTTP ${response.statusCode})',
+    );
+  }
+
   /// GET /api/requests/history/{requestNo}
   /// Mirrors cvps.getRequestHistory(requestNo) in Angular.
   Future<List<Map<String, dynamic>>> fetchRequestHistory(int requestNo) async {

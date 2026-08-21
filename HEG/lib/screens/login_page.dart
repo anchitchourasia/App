@@ -109,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({'empNo': u, 'password': p}),
+            body: jsonEncode({'username': u, 'password': p}),
           )
           .timeout(const Duration(milliseconds: 12000));
 
