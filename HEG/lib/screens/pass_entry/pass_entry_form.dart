@@ -894,7 +894,11 @@ class _PassEntryFormState extends State<PassEntryForm> {
         PassDropdown(
           label: 'Vehicle Type',
           value: _vehicleType.isEmpty ? null : _vehicleType,
-          items: _vehicleTypes,
+          // NEW: Dynamically add backend value if missing
+          items:
+              _vehicleType.isNotEmpty && !_vehicleTypes.contains(_vehicleType)
+              ? [..._vehicleTypes, _vehicleType]
+              : _vehicleTypes,
           hint: '-- Select Vehicle Type --',
           onChanged: _isReadOnly
               ? null
@@ -934,7 +938,10 @@ class _PassEntryFormState extends State<PassEntryForm> {
         PassDropdown(
           label: 'Employee Type',
           value: _empType.isEmpty ? null : _empType,
-          items: _empTypes,
+          // NEW: Dynamically add backend value if missing
+          items: _empType.isNotEmpty && !_empTypes.contains(_empType)
+              ? [..._empTypes, _empType]
+              : _empTypes,
           hint: '-- Select Employee Type --',
           onChanged: _isReadOnly
               ? null
@@ -1091,7 +1098,10 @@ class _PassEntryFormState extends State<PassEntryForm> {
         PassDropdown(
           label: 'Gate No',
           value: _gateNo.isEmpty ? null : _gateNo,
-          items: _gates,
+          // NEW: Prevent crash for custom Gate names
+          items: _gateNo.isNotEmpty && !_gates.contains(_gateNo)
+              ? [..._gates, _gateNo]
+              : _gates,
           hint: '-- Select Gate --',
           onChanged: _isReadOnly
               ? null
@@ -1102,7 +1112,12 @@ class _PassEntryFormState extends State<PassEntryForm> {
         PassDropdown(
           label: 'Parking Area',
           value: _parkingToBeUsed.isEmpty ? null : _parkingToBeUsed,
-          items: _parkings,
+          // NEW: Prevent crash for custom parking like "BhujariyaParking"
+          items:
+              _parkingToBeUsed.isNotEmpty &&
+                  !_parkings.contains(_parkingToBeUsed)
+              ? [..._parkings, _parkingToBeUsed]
+              : _parkings,
           hint: '-- Select Parking Area --',
           onChanged: _isReadOnly
               ? null

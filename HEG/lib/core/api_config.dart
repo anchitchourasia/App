@@ -26,7 +26,7 @@ class ApiConfig {
   static String gateLogs = '$baseUrl/api/gate-logs/list';
   static String compliance = '$baseUrl/api/compliance/list';
 
-  // CVPS (mirroring web API_CONFIG)
+  // CVPS (existing)
   static String cvpsBase = '$cvpsBaseUrl/api/requests';
   static String cvpsCreateRequest = '$cvpsBaseUrl/api/requests/create';
   static String cvpsUpdateRequest = '$cvpsBaseUrl/api/requests/update';
@@ -34,4 +34,13 @@ class ApiConfig {
   static String cvpsGetAllRequests = '$cvpsBaseUrl/api/requests';
   static String cvpsDeleteRequest = '$cvpsBaseUrl/api/requests';
   static String cvpsBpRecords = '$cvpsBaseUrl/api/bp-records';
+
+  // CVPS – new endpoints (mirroring web API_CONFIG)
+  static String cvpsGetManpowerDocuments(String empNo) =>
+      '$cvpsBaseUrl/api/manpower/documents/$empNo';
+
+  static String cvpsDownloadManpowerDocument(String fileName) =>
+      '$cvpsBaseUrl/api/manpower/documents/download/$fileName';
+
+  static String cvpsDepartmentList = '$cvpsBaseUrl/api/dept';
 }

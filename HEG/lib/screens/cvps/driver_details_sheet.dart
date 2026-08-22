@@ -1,17 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../data/cvps_api.dart';
 
 class DriverDetailsData {
-  final String role;
   final String empNo;
   final String name;
-  final String eyeTestDate;
-  final String eyeTestFileName;
   final String mobileNo;
   final String aadhaarNo;
   final String licenseNo;
-  final String licenseType;
   final String licenseFrom;
   final String licenseTo;
   final String aadhaarFileName;
@@ -19,15 +19,11 @@ class DriverDetailsData {
   final String licenseFileName;
 
   const DriverDetailsData({
-    required this.role,
     required this.empNo,
     required this.name,
-    required this.eyeTestDate,
-    required this.eyeTestFileName,
     required this.mobileNo,
     required this.aadhaarNo,
     required this.licenseNo,
-    required this.licenseType,
     required this.licenseFrom,
     required this.licenseTo,
     required this.aadhaarFileName,
@@ -35,77 +31,66 @@ class DriverDetailsData {
     required this.licenseFileName,
   });
 
-  DriverDetailsData copyWithApiData(Map<String, dynamic> data) {
+  DriverDetailsData mergeApiData(Map<String, dynamic> data) {
     return DriverDetailsData(
-      role: _first(data, ['empType', 'empJob', 'role'], role),
-      empNo: _first(data, ['empNo', 'employeeNo', 'employeeCode'], empNo),
-      name: _first(
+      empNo: _value(data, ['empNo', 'employeeNo', 'employeeCode'], empNo),
+      name: _value(
         data,
-        ['empName', 'employeeName', 'name', 'EMP_NAME', 'EMPLOYEENAME'],
+        [
+          'empName',
+          'employeeName',
+          'name',
+          'EMP_NAME',
+          'EMPNAME',
+          'EMPLOYEENAME',
+        ],
         name,
       ),
-      eyeTestDate: _first(
-        data,
-        ['eyeTestDate', 'eyetestdate'],
-        eyeTestDate,
-      ),
-      eyeTestFileName: _fileName(
-        _first(
-          data,
-          ['eyeTestFile', 'eyeTestFileName', 'eyeTestDocument'],
-          eyeTestFileName,
-        ),
-      ),
-      mobileNo: _first(
+      mobileNo: _value(
         data,
         ['mobileNo', 'mobile', 'phoneNo', 'phone', 'contactNo'],
         mobileNo,
       ),
-      aadhaarNo: _first(
+      aadhaarNo: _value(
         data,
         ['aadhaarNo', 'aadharNo', 'aadhaar', 'aadhar'],
         aadhaarNo,
       ),
-      licenseNo: _first(
+      licenseNo: _value(
         data,
         ['licenseNo', 'licenseNumber', 'licenceNo', 'dlNo'],
         licenseNo,
       ),
-      licenseType: _first(
-        data,
-        ['licenseType', 'licenceType', 'dlType'],
-        licenseType,
-      ),
       licenseFrom: _date(
-        _first(
+        _value(
           data,
           ['licenseActDate', 'licenseFrom', 'licenseValidFrom', 'validFrom'],
           licenseFrom,
         ),
       ),
       licenseTo: _date(
-        _first(
+        _value(
           data,
           ['licenseExpDate', 'licenseTo', 'licenseValidTo', 'validTill'],
           licenseTo,
         ),
       ),
       aadhaarFileName: _fileName(
-        _first(
+        _value(
           data,
           ['aadharFile', 'aadhaarFile', 'aadhaarFileName'],
           aadhaarFileName,
         ),
       ),
       photoFileName: _fileName(
-        _first(
+        _value(
           data,
           ['empPhoto', 'photoFile', 'photoFileName'],
           photoFileName,
         ),
       ),
       licenseFileName: _fileName(
-        _first(
+        _value(
           data,
           ['licenseFile', 'licenceFile', 'licenseFileName'],
           licenseFileName,
@@ -114,29 +99,23 @@ class DriverDetailsData {
     );
   }
 
-  static String _first(
+  static String _value(
     Map<String, dynamic> data,
     List<String> keys,
     String fallback,
   ) {
     for (final key in keys) {
-      final value = data[key];
-
-      if (value != null && value.toString().trim().isNotEmpty) {
-        return value.toString().trim();
-      }
+      final value = data[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
     }
-
     return fallback;
   }
 
   static String _fileName(String value) {
-    if (value.trim().isEmpty) return '';
     return value.replaceAll('\\', '/').split('/').last;
   }
 
   static String _date(String value) {
-    if (value.trim().isEmpty) return '';
     return value.length >= 10 ? value.substring(0, 10) : value;
   }
 }
@@ -176,24 +155,14 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
     });
 
     try {
-      final result = await widget.api.fetchManpowerDocuments(
-        _driver.empNo.trim(),
-      );
+      final data = await widget.api.fetchManpowerDocuments(_driver.empNo);
 
-      if (result != null) {
-        final data = _unwrapResponse(result);
-
-        if (mounted) {
-          setState(() {
-            _driver = _driver.copyWithApiData(data);
-          });
-        }
+      if (data != null && mounted) {
+        setState(() => _driver = _driver.mergeApiData(data));
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        setState(() {
-          _error = 'Unable to load additional driver details.';
-        });
+        setState(() => _error = 'Unable to load driver details.');
       }
     } finally {
       if (mounted) {
@@ -202,14 +171,48 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
     }
   }
 
-  Map<String, dynamic> _unwrapResponse(Map<String, dynamic> response) {
-    final data = response['data'];
+  Future<void> _download(String fileName, String label) async {
+    final name = fileName.trim();
+    if (name.isEmpty) return;
 
-    if (data is Map<String, dynamic>) {
-      return data;
+    try {
+      final bytes = await widget.api.downloadManpowerDocumentBytes(name);
+
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${documentsDir.path}/downloads');
+
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final file = File('${downloadsDir.path}/$name');
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+
+      final result = await OpenFilex.open(
+        file.path,
+        type: widget.api.guessMimeType(name),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.type == ResultType.done
+                ? 'Downloaded and opened: $name'
+                : 'Saved to: ${file.path}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to download $label: $e')),
+      );
     }
-
-    return response;
   }
 
   @override
@@ -222,47 +225,11 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFFF5F7FB),
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(22),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             children: [
-              Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 6),
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 8, 10),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.person_search_outlined,
-                      color: Color(0xFF1D4ED8),
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Driver Information',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF102A43),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
+              _header(),
               const Divider(height: 1),
               Expanded(
                 child: SingleChildScrollView(
@@ -271,43 +238,41 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
                   child: _loading
                       ? const Padding(
                           padding: EdgeInsets.all(30),
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                          child: Center(child: CircularProgressIndicator()),
                         )
                       : Column(
                           children: [
-                            if (_error != null)
-                              _message(_error!),
+                            if (_error != null) _message(_error!),
                             _section(
-                              'Basic Details',
-                              [
-                                _field('Name', _driver.name),
-                                _field('Role', _driver.role),
-                                _field('Employee Code', _driver.empNo),
+                              title: 'Personal Information',
+                              icon: Icons.person,
+                              children: [
+                                _field('Driver Name', _driver.name),
+                                _field('Employee Number', _driver.empNo),
                                 _field('Mobile Number', _driver.mobileNo),
                                 _field('Aadhaar Number', _driver.aadhaarNo),
+                                _fileField(
+                                  'Aadhaar File',
+                                  _driver.aadhaarFileName,
+                                ),
+                                _fileField(
+                                  'Driver Photo',
+                                  _driver.photoFileName,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 12),
                             _section(
-                              'Driving Licence',
-                              [
-                                _field('Licence Number', _driver.licenseNo),
-                                _field('Licence Type', _driver.licenseType),
-                                _field('Valid From', _driver.licenseFrom),
-                                _field('Valid To', _driver.licenseTo),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            _section(
-                              'Documents',
-                              [
-                                _field('Aadhaar File', _driver.aadhaarFileName),
-                                _field('Photo File', _driver.photoFileName),
-                                _field('Licence File', _driver.licenseFileName),
-                                _field('Eye Test Date', _driver.eyeTestDate),
-                                _field('Eye Test File', _driver.eyeTestFileName),
+                              title: 'Driving Licence Information',
+                              icon: Icons.badge_outlined,
+                              children: [
+                                _field('License Number', _driver.licenseNo),
+                                _field('License From', _driver.licenseFrom),
+                                _field('License To', _driver.licenseTo),
+                                _fileField(
+                                  'License File',
+                                  _driver.licenseFileName,
+                                ),
                               ],
                             ),
                           ],
@@ -321,7 +286,53 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
     );
   }
 
-  Widget _section(String title, List<Widget> children) {
+  Widget _header() {
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 10, bottom: 6),
+          width: 42,
+          height: 4,
+          decoration: BoxDecoration(
+            color: const Color(0xFFCBD5E1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 10),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.badge_outlined,
+                color: Color(0xFF1D4ED8),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Driver Details',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF102A43),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _section({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -333,13 +344,19 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF102A43),
-            ),
+          Row(
+            children: [
+              Icon(icon, size: 18, color: const Color(0xFF2563EB)),
+              const SizedBox(width: 7),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF102A43),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           ...children,
@@ -349,31 +366,77 @@ class _DriverDetailsSheetState extends State<DriverDetailsSheet> {
   }
 
   Widget _field(String label, String value) {
-    final display = value.trim().isEmpty ? '-' : value.trim();
+    return _box(
+      label,
+      Text(
+        value.trim().isEmpty ? '—' : value.trim(),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF0F172A),
+        ),
+      ),
+    );
+  }
 
+  Widget _fileField(String label, String fileName) {
+    final hasFile = fileName.trim().isNotEmpty;
+
+    return _box(
+      label,
+      hasFile
+          ? OutlinedButton.icon(
+              onPressed: () => _download(fileName, label),
+              icon: const Icon(Icons.download, size: 16),
+              label: const Text('Download'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2563EB),
+                side: const BorderSide(color: Color(0xFFBFDBFE)),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            )
+          : const Text(
+              'Not available',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF94A3B8),
+              ),
+            ),
+    );
+  }
+
+  Widget _box(String label, Widget child) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF64748B),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF64748B),
+              ),
             ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            display,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            child,
+          ],
+        ),
       ),
     );
   }

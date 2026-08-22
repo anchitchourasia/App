@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../data/cvps_api.dart';
 import '../../widgets/heg_app_bar.dart';
@@ -136,7 +139,6 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
   String errorMessage = '';
 
   int? requestNo;
-  Map<String, dynamic>? dto;
 
   // Header fields
   String status = 'Draft';
@@ -148,6 +150,7 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
   String contractorCode = '';
   String contractorName = '';
   String department = '';
+  String departmentCode = '';
   String natureOfJob = '';
   String reqDate = ''; // request / created date
   String permissionDateTo = '';
@@ -197,15 +200,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
         return DriverDetailsSheet(
           api: api,
           driver: DriverDetailsData(
-            role: driver.role,
             empNo: driver.empNo,
             name: driver.name,
-            eyeTestDate: driver.eyeTestDate,
-            eyeTestFileName: driver.eyeTestFileName ?? '',
             mobileNo: driver.mobileNo,
             aadhaarNo: driver.aadhaarNo,
             licenseNo: driver.licenseNo,
-            licenseType: driver.licenseType,
             licenseFrom: driver.licenseFrom,
             licenseTo: driver.licenseTo,
             aadhaarFileName: driver.aadhaarFileName,
@@ -217,10 +216,63 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     );
   }
 
+  Future<void> _saveAndOpenFile(
+    Uint8List bytes,
+    String fileName,
+    String label,
+  ) async {
+    final name = fileName.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No $label file available.')));
+      return;
+    }
+
+    try {
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${documentsDir.path}/downloads');
+
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final file = File('${downloadsDir.path}/$name');
+      await file.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+
+      final result = await OpenFilex.open(
+        file.path,
+        type: api.guessMimeType(name),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.type == ResultType.done
+                ? 'Downloaded and opened: $name'
+                : 'Saved to: ${file.path}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save $label: $e')));
+    }
+  }
+
   /// Downloads an Eye Test file for a driver.
-  Future<void> _downloadEyeTest(_DriverPerson p) async {
-    final fileName = p.eyeTestFileName;
-    if (fileName == null || fileName.isEmpty) {
+  Future<void> _downloadEyeTest(_DriverPerson driver) async {
+    final fileName = driver.eyeTestFileName?.trim() ?? '';
+
+    if (fileName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No eye test file available.')),
       );
@@ -228,15 +280,14 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     }
 
     try {
-      final Uint8List bytes = await api.downloadDocumentBytes(fileName);
-      final mime = api.guessMimeType(fileName);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Downloaded $fileName ($mime, ${bytes.length} bytes)'),
-        ),
-      );
-      // TODO: save bytes to temp file and open with open_file or share_plus.
+      final bytes = await api.downloadDocumentBytes(fileName);
+
+      if (!mounted) return;
+
+      await _saveAndOpenFile(bytes, fileName, 'eye test');
     } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to download $fileName: $e')),
       );
@@ -245,8 +296,10 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
 
   /// Downloads a vehicle document and shows a message.
   /// Mirrors clicking a link in web UI.
-  Future<void> _downloadDoc(_DocEntry d) async {
-    if (d.existingFile == null || d.existingFile!.isEmpty) {
+  Future<void> _downloadDoc(_DocEntry document) async {
+    final fileName = document.existingFile?.trim() ?? '';
+
+    if (fileName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No file available to download.')),
       );
@@ -254,19 +307,16 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     }
 
     try {
-      final fileName = d.existingFile!;
-      final Uint8List bytes = await api.downloadDocumentBytes(fileName);
-      final mime = api.guessMimeType(fileName);
+      final bytes = await api.downloadDocumentBytes(fileName);
+
+      if (!mounted) return;
+
+      await _saveAndOpenFile(bytes, fileName, document.docType);
+    } catch (e) {
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Downloaded $fileName ($mime, ${bytes.length} bytes)'),
-        ),
-      );
-      // TODO: save bytes to temp file and open with open_file or share_plus.
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to download ${d.existingFile}: $e')),
+        SnackBar(content: Text('Failed to download $fileName: $e')),
       );
     }
   }
@@ -283,6 +333,9 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       // 1) Main DTO: cvps.getRequestById(requestNo)
       final result = await api.fetchRequestById(no);
       _fillFromDto(result);
+
+      await _resolveDepartmentName();
+      await _resolveMissingDriverNames();
 
       // 2) Contractor BP details: cvps.fetchContractorDetails(contractorCode)
       if (contractorIdRaw.isNotEmpty) {
@@ -329,7 +382,6 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       }
 
       setState(() {
-        dto = result;
         loading = false;
       });
     } catch (e) {
@@ -356,7 +408,11 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     contractorIdRaw = _safeString(req['contractorId']).toUpperCase();
     contractorCode = contractorIdRaw; // before BP lookup
     contractorName = ''; // will be filled via BP API
-    department = _safeString(req['department']);
+    departmentCode = _safeString(
+      req['deptCode'] ?? req['departmentCode'] ?? req['department'],
+    );
+
+    department = departmentCode;
     natureOfJob = _safeString(req['natureOfJob']);
     reqDate = _formatDate(req['createdDate']);
     permissionDateTo = _formatDate(req['permissionTo']);
@@ -401,6 +457,9 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       }
 
       final eyeFileRaw =
+          emp['eyeTestFile'] ??
+          emp['eyeTestFileName'] ??
+          emp['eyeTestDocument'] ??
           eyeDoc?['filename'] ??
           eyeDoc?['fileName'] ??
           eyeDoc?['documentName'] ??
@@ -436,14 +495,24 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       }
 
       return _DriverPerson(
-        role: _safeString(emp['empJob']),
-        empNo: _safeString(emp['empNo']),
+        role: _safeString(
+          emp['empType'] ??
+              emp['empJob'] ??
+              emp['role'] ??
+              emp['jobType'] ??
+              'Driver',
+        ),
+        empNo: _safeString(
+          emp['empNo'] ?? emp['employeeNo'] ?? emp['employeeCode'],
+        ),
         name: _safeString(
           emp['empName'] ??
               emp['EMP_NAME'] ??
+              emp['EMPNAME'] ??
               emp['name'] ??
               emp['NAME'] ??
-              emp['employeeName'],
+              emp['employeeName'] ??
+              emp['EMPLOYEENAME'],
         ),
         eyeTestDate: _formatDate(eyeDateRaw),
         eyeTestFileName: eyeFileName,
@@ -485,13 +554,60 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
     return _stripPath(raw.toString());
   }
 
+  Future<void> _resolveDepartmentName() async {
+    if (departmentCode.trim().isEmpty) return;
+
+    try {
+      final departments = await api.fetchDepartments();
+
+      final match = departments.firstWhere(
+        (item) => _safeString(item['deptCode']).trim() == departmentCode.trim(),
+        orElse: () => <String, dynamic>{},
+      );
+
+      final departmentName = _safeString(
+        match['deptName'] ?? match['departmentName'] ?? match['name'],
+      );
+
+      if (mounted && departmentName.isNotEmpty) {
+        setState(() {
+          department = departmentName;
+        });
+      }
+    } catch (_) {
+      // Retain departmentCode if the lookup endpoint fails.
+    }
+  }
+
+  Future<void> _resolveMissingDriverNames() async {
+    for (var index = 0; index < drivers.length; index++) {
+      final driver = drivers[index];
+
+      if (driver.empNo.trim().isEmpty || driver.name.trim().isNotEmpty) {
+        continue;
+      }
+
+      final employeeName = await api.fetchEmployeeName(driver.empNo);
+
+      if (!mounted || employeeName == null || employeeName.trim().isEmpty) {
+        continue;
+      }
+
+      setState(() {
+        drivers[index] = driver.copyWith(name: employeeName.trim());
+      });
+    }
+  }
+
   /// Strip any path segments, return only last part.
   String _stripPath(String s) {
     final parts = s.split('/');
     return parts.isNotEmpty ? parts.last : s;
   }
 
-  String _safeString(dynamic value) => value == null ? '' : value.toString();
+  String _safeString(dynamic value) {
+    return value == null ? '' : value.toString().trim();
+  }
 
   String _formatDate(dynamic value) {
     if (value == null) return '';

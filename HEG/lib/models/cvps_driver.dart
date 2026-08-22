@@ -1,10 +1,11 @@
 class CvpsDriver {
-  final String role;             // e.g. 'Driver', 'Helper'
+  final String role;
   final String name;
   final String mobileNo;
   final String aadhaarNo;
   final String licenseNo;
-  final String licenseValidTill; // ISO string, e.g. '2026-09-05'
+  final String licenseValidTill;
+  final String eyeTestDate;
 
   CvpsDriver({
     required this.role,
@@ -13,5 +14,6 @@ class CvpsDriver {
     required this.aadhaarNo,
     required this.licenseNo,
     required this.licenseValidTill,
+    this.eyeTestDate = '',
   });
 }

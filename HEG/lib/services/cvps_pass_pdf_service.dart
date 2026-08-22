@@ -49,7 +49,7 @@ class CvpsPassPdfService {
         build: (context) => [
           _buildHeader(formNo, securityLogoBytes, hegLogoBytes),
           pw.SizedBox(height: 12),
-          _buildGeneralInfo(request, contractorName),
+          _buildGeneralInfo(request, contractorName, requestNo),
           pw.SizedBox(height: 12),
           _buildVehicleDocsTable(vehicleDocuments, request),
           pw.SizedBox(height: 12),
@@ -170,7 +170,11 @@ class CvpsPassPdfService {
 
   // ── GENERAL INFO ────────────────────────────────────────
 
-  pw.Widget _buildGeneralInfo(CvpsRequestItem req, String contractorName) {
+  pw.Widget _buildGeneralInfo(
+    CvpsRequestItem req,
+    String contractorName,
+    int requestNo,
+  ) {
     final contractorDisplay = contractorName.isEmpty
         ? (req.contractorCode.isEmpty ? '-' : req.contractorCode)
         : '$contractorName (${req.contractorCode.isEmpty ? '-' : req.contractorCode})';
@@ -216,20 +220,20 @@ class CvpsPassPdfService {
           },
           children: [
             _infoRow(
+              'Permission No.',
+              requestNo.toString(),
               'Contractor Name (Code)',
               contractorDisplay,
               'Request Date',
               _fmtDate(req.createdDate),
-              'Nature of Job',
-              req.natureOfJob.isEmpty ? '-' : req.natureOfJob,
             ),
             _infoRow(
+              'Nature of Job',
+              req.natureOfJob.isEmpty ? '-' : req.natureOfJob,
               'Permission To',
               _fmtDate(req.permissionTo),
               'Current Status',
               req.reqStatus.isEmpty ? '-' : req.reqStatus,
-              'Approved Date',
-              '-',
             ),
           ],
         ),
@@ -348,6 +352,7 @@ class CvpsPassPdfService {
             d.aadhaarNo.isEmpty ? '-' : d.aadhaarNo,
             d.licenseNo.isEmpty ? '-' : d.licenseNo,
             _fmtDate(d.licenseValidTill),
+            _fmtDate(d.eyeTestDate),
             _remarkText(d.licenseValidTill),
           ],
         )
@@ -373,6 +378,7 @@ class CvpsPassPdfService {
                 _tableHeaderCell('Aadhar No.'),
                 _tableHeaderCell('License No.'),
                 _tableHeaderCell('License Valid Upto'),
+                _tableHeaderCell('Eye Test Date'),
                 _tableHeaderCell('Remark (License)'),
               ],
             ),
@@ -386,7 +392,8 @@ class CvpsPassPdfService {
                   _tableCell(row[3]),
                   _tableCell(row[4]),
                   _tableCell(row[5]),
-                  _remarkCell(row[6], remarkStyle),
+                  _tableCell(row[6]),
+                  _remarkCell(row[7], remarkStyle),
                 ],
               );
             }),
@@ -408,31 +415,50 @@ class CvpsPassPdfService {
         pw.Divider(color: PdfColors.grey300),
         pw.SizedBox(height: 6),
         pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            _signatureBlock(
-              name: contractorName.isEmpty ? '-' : contractorName,
-              code: req.contractorCode.isEmpty ? '-' : req.contractorCode,
-              dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
-              role: 'contractor name',
+            pw.Expanded(
+              child: _signatureBlock(
+                name: contractorName.isEmpty ? '-' : contractorName,
+                code: req.contractorCode.isEmpty ? '-' : req.contractorCode,
+                dateText: _fmtDateTime(
+                  _latestStageDate(history, 'UPLOADER') ?? '',
+                ),
+                role: 'uploader',
+              ),
             ),
-            _signatureBlock(
-              name: _stageName(history, 'UPLOADER'),
-              code: _stageEmpCode(history, 'UPLOADER'),
-              dateText: _fmtDate(_latestStageDate(history, 'UPLOADER') ?? ''),
-              role: 'uploader',
+            pw.SizedBox(width: 6),
+            pw.Expanded(
+              child: _signatureBlock(
+                name: _stageName(history, 'CONFIRMER'),
+                code: _stageEmpCode(history, 'CONFIRMER'),
+                dateText: _fmtDateTime(
+                  _latestStageDate(history, 'CONFIRMER') ?? '',
+                ),
+                role: 'confirmer',
+              ),
             ),
-            _signatureBlock(
-              name: _stageName(history, 'CONFIRMER'),
-              code: _stageEmpCode(history, 'CONFIRMER'),
-              dateText: _fmtDate(_latestStageDate(history, 'CONFIRMER') ?? ''),
-              role: 'confirmer',
+            pw.SizedBox(width: 6),
+            pw.Expanded(
+              child: _signatureBlock(
+                name: _stageName(history, 'VERIFIER'),
+                code: _stageEmpCode(history, 'VERIFIER'),
+                dateText: _fmtDateTime(
+                  _latestStageDate(history, 'VERIFIER') ?? '',
+                ),
+                role: 'verifier',
+              ),
             ),
-            _signatureBlock(
-              name: _stageName(history, 'APPROVER'),
-              code: _stageEmpCode(history, 'APPROVER'),
-              dateText: _fmtDate(_latestStageDate(history, 'APPROVER') ?? ''),
-              role: 'approver',
+            pw.SizedBox(width: 6),
+            pw.Expanded(
+              child: _signatureBlock(
+                name: _stageName(history, 'APPROVER'),
+                code: _stageEmpCode(history, 'APPROVER'),
+                dateText: _fmtDateTime(
+                  _latestStageDate(history, 'APPROVER') ?? '',
+                ),
+                role: 'approver',
+              ),
             ),
           ],
         ),
@@ -446,40 +472,56 @@ class CvpsPassPdfService {
     required String dateText,
     required String role,
   }) {
-    final displayName = name.isEmpty ? '-' : name;
-    final displayCode = code.isEmpty ? '-' : code;
-    final displayDate = dateText.isEmpty ? '-' : dateText;
+    final displayName = name.trim().isEmpty ? '-' : name.trim();
+    final displayCode = code.trim().isEmpty ? '-' : code.trim();
+    final displayDate = dateText.trim().isEmpty ? '-' : dateText.trim();
 
     return pw.Container(
-      width: 90,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2),
       child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
-          pw.Text(
-            displayName,
-            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-            textAlign: pw.TextAlign.center,
+          pw.SizedBox(
+            height: 18,
+            child: pw.Center(
+              child: pw.Text(
+                displayName,
+                maxLines: 2,
+                overflow: pw.TextOverflow.clip,
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  fontSize: 7,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
           ),
-          pw.Divider(color: PdfColors.grey400),
+          pw.Container(height: 0.5, color: PdfColors.grey400),
+          pw.SizedBox(height: 3),
           pw.Text(
             displayCode,
-            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            maxLines: 1,
             textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
           ),
+          pw.SizedBox(height: 2),
           pw.Text(
             displayDate,
-            style: const pw.TextStyle(fontSize: 7),
+            maxLines: 1,
             textAlign: pw.TextAlign.center,
+            style: const pw.TextStyle(fontSize: 5.5),
           ),
+          pw.SizedBox(height: 2),
           pw.Text(
             role,
-            style: const pw.TextStyle(fontSize: 7),
             textAlign: pw.TextAlign.center,
+            style: const pw.TextStyle(fontSize: 6),
           ),
         ],
       ),
     );
   }
-
   // ── FOOTER ──────────────────────────────────────────────
 
   pw.Widget _buildFooter() {
@@ -548,15 +590,91 @@ class CvpsPassPdfService {
   // ── HELPERS ─────────────────────────────────────────────
 
   String _fmtDate(String value) {
-    if (value.isEmpty) return '-';
+    if (value.trim().isEmpty) return '-';
+
     try {
       final d = DateTime.parse(value);
+
       return '${d.day.toString().padLeft(2, '0')}-'
           '${d.month.toString().padLeft(2, '0')}-'
           '${d.year}';
     } catch (_) {
       return value;
     }
+  }
+
+  String _fmtDateTime(String value) {
+    final raw = value.trim();
+
+    if (raw.isEmpty) {
+      return '-';
+    }
+
+    // Oracle timestamp:
+    // 03-AUG-26 03.18.55.014000000 PM
+    final oracleMatch = RegExp(
+      r'^(\d{2})-([A-Za-z]{3})-(\d{2,4})\s+'
+      r'(\d{2})\.(\d{2})\.(\d{2})(?:\.\d+)?\s*(AM|PM)$',
+      caseSensitive: false,
+    ).firstMatch(raw);
+
+    if (oracleMatch != null) {
+      final day = oracleMatch.group(1)!;
+      final monthName = oracleMatch.group(2)!.toUpperCase();
+      final shortOrLongYear = oracleMatch.group(3)!;
+      final hour12 = int.parse(oracleMatch.group(4)!);
+      final minute = oracleMatch.group(5)!;
+      final second = oracleMatch.group(6)!;
+      final period = oracleMatch.group(7)!.toUpperCase();
+
+      const monthNumbers = {
+        'JAN': '01',
+        'FEB': '02',
+        'MAR': '03',
+        'APR': '04',
+        'MAY': '05',
+        'JUN': '06',
+        'JUL': '07',
+        'AUG': '08',
+        'SEP': '09',
+        'OCT': '10',
+        'NOV': '11',
+        'DEC': '12',
+      };
+
+      final month = monthNumbers[monthName] ?? '01';
+      final year = shortOrLongYear.length == 2
+          ? '20$shortOrLongYear'
+          : shortOrLongYear;
+
+      var hour24 = hour12;
+
+      if (period == 'PM' && hour12 != 12) {
+        hour24 += 12;
+      }
+
+      if (period == 'AM' && hour12 == 12) {
+        hour24 = 0;
+      }
+
+      return '$day-$month-$year '
+          '${hour24.toString().padLeft(2, '0')}:$minute:$second';
+    }
+
+    // ISO timestamp without timezone:
+    // 2026-08-03T15:18:55
+    final isoMatch = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})[T\s]'
+      r'(\d{2}):(\d{2}):(\d{2})',
+    ).firstMatch(raw);
+
+    if (isoMatch != null) {
+      return '${isoMatch.group(3)}-${isoMatch.group(2)}-'
+          '${isoMatch.group(1)} ${isoMatch.group(4)}:'
+          '${isoMatch.group(5)}:${isoMatch.group(6)}';
+    }
+
+    return raw;
   }
 
   int? _daysDiff(String value) {

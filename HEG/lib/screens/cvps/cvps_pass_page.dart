@@ -142,6 +142,62 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
     );
   }
 
+  // ── Actions (Back + Download Pass) ──────────────────────
+  Widget _detailRow(String label, String value) {
+    final displayValue = value.trim().isEmpty ? '-' : value.trim();
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 118,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            displayValue,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _remarkChip(String text, _RemarkStyle style) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 122),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: style.fillColor,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: style.textColor,
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorView() {
     return Center(
       child: Padding(
@@ -322,6 +378,7 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
       child: Column(
         children: [
           _grid2([
+            _field('Permission No.', req.requestNo.toString()),
             _field('Contractor Code', req.contractorCode),
             _field('Contractor Name', _contractorName),
             _field('Request Date', _formatDateForUi(req.createdDate)),
@@ -337,7 +394,6 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
       ),
     );
   }
-
   // ── Vehicle section ─────────────────────────────────────
 
   Widget _buildVehicleSection(CvpsRequestItem req) {
@@ -361,48 +417,82 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
   }
 
   Widget _vehicleDocsTable() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Vehicle Documents')),
-          DataColumn(label: Text('Doc. Number')),
-          DataColumn(label: Text('Valid Upto')),
-          DataColumn(label: Text('Remark')),
+    return Column(
+      children: [
+        for (var index = 0; index < _vehicleDocs.length; index++) ...[
+          _vehicleDocumentCard(_vehicleDocs[index], index + 1),
+          if (index != _vehicleDocs.length - 1) const SizedBox(height: 10),
         ],
-        rows: _vehicleDocs.map((d) {
-          final remarkText = _remarkText(d.validTill);
-          final remarkStyle = _remarkStyle(d.validTill);
-          return DataRow(
-            cells: [
-              DataCell(Text(d.documentType.isEmpty ? '-' : d.documentType)),
-              DataCell(Text(d.documentNo.isEmpty ? '-' : d.documentNo)),
-              DataCell(
-                Text(d.validTill.isEmpty ? '-' : _formatDateForUi(d.validTill)),
-              ),
-              DataCell(
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: remarkStyle.fillColor,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    remarkText,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: remarkStyle.textColor,
-                    ),
+      ],
+    );
+  }
+
+  Widget _vehicleDocumentCard(CvpsDocument document, int index) {
+    final remarkText = _remarkText(document.validTill);
+    final remarkStyle = _remarkStyle(document.validTill);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF2FF),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  '$index',
+                  style: const TextStyle(
+                    color: Color(0xFF2563EB),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Vehicle Document',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              _remarkChip(remarkText, remarkStyle),
             ],
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 12),
+          _detailRow(
+            'Document Type',
+            document.documentType.isEmpty ? '-' : document.documentType,
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'Document Number',
+            document.documentNo.isEmpty ? '-' : document.documentNo,
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'Valid Upto',
+            document.validTill.isEmpty
+                ? '-'
+                : _formatDateForUi(document.validTill),
+          ),
+        ],
       ),
     );
   }
@@ -419,58 +509,99 @@ class _CvpsPassPageState extends State<CvpsPassPage> {
   }
 
   Widget _driversTable() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Role')),
-          DataColumn(label: Text('Name')),
-          DataColumn(label: Text('Contact No.')),
-          DataColumn(label: Text('Aadhar No.')),
-          DataColumn(label: Text('License No.')),
-          DataColumn(label: Text('Valid Upto')),
-          DataColumn(label: Text('Remark')),
+    return Column(
+      children: [
+        for (var index = 0; index < _drivers.length; index++) ...[
+          _driverCard(_drivers[index], index + 1),
+          if (index != _drivers.length - 1) const SizedBox(height: 12),
         ],
-        rows: _drivers.map((d) {
-          final remarkText = _remarkText(d.licenseValidTill);
-          final remarkStyle = _remarkStyle(d.licenseValidTill);
-          return DataRow(
-            cells: [
-              DataCell(Text(d.role.isEmpty ? '-' : d.role)),
-              DataCell(Text(d.name.isEmpty ? '-' : d.name)),
-              DataCell(Text(d.mobileNo.isEmpty ? '-' : d.mobileNo)),
-              DataCell(Text(d.aadhaarNo.isEmpty ? '-' : d.aadhaarNo)),
-              DataCell(Text(d.licenseNo.isEmpty ? '-' : d.licenseNo)),
-              DataCell(
-                Text(
-                  d.licenseValidTill.isEmpty
-                      ? '-'
-                      : _formatDateForUi(d.licenseValidTill),
+      ],
+    );
+  }
+
+  Widget _driverCard(CvpsDriver driver, int index) {
+    final remarkText = _remarkText(driver.licenseValidTill);
+    final remarkStyle = _remarkStyle(driver.licenseValidTill);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF2FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$index',
+                  style: const TextStyle(
+                    color: Color(0xFF2563EB),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              DataCell(
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: remarkStyle.fillColor,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    remarkText,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: remarkStyle.textColor,
-                    ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  driver.name.isEmpty ? 'Driver / Conductor' : driver.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E293B),
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              _remarkChip(remarkText, remarkStyle),
             ],
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 12),
+          _detailRow('Role', driver.role.isEmpty ? '-' : driver.role),
+          const SizedBox(height: 8),
+          _detailRow(
+            'Contact Number',
+            driver.mobileNo.isEmpty ? '-' : driver.mobileNo,
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'Aadhaar Number',
+            driver.aadhaarNo.isEmpty ? '-' : driver.aadhaarNo,
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'License Number',
+            driver.licenseNo.isEmpty ? '-' : driver.licenseNo,
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'License Valid Upto',
+            driver.licenseValidTill.isEmpty
+                ? '-'
+                : _formatDateForUi(driver.licenseValidTill),
+          ),
+          const SizedBox(height: 8),
+          _detailRow(
+            'Eye Test Date',
+            driver.eyeTestDate.isEmpty
+                ? '-'
+                : _formatDateForUi(driver.eyeTestDate),
+          ),
+        ],
       ),
     );
   }

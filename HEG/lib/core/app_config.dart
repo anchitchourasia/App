@@ -7,12 +7,13 @@
 
 //   static const String apiKey = 'VPMS_SECRET_KEY_2026';
 // }
+// class AppConfig {
+//   static const String apiBaseUrl = 'http://127.0.0.1:9092/vpms';
+//   static const String cvpsBaseUrl = 'http://127.0.0.1:9092/cvps';
+//   static const String apiKey = 'VPMS_SECRET_KEY_2026';
+// }
 class AppConfig {
-  // VPMS (same as web apiBaseUrl but using 10.0.2.2 for Android emulator)
   static const String apiBaseUrl = 'http://192.168.9.130:9092/vpms';
-
-  // CVPS backend (same as web cvpsBaseUrl, but use 10.0.2.2 instead of localhost)
   static const String cvpsBaseUrl = 'http://192.168.9.130:9092/cvps';
-
   static const String apiKey = 'VPMS_SECRET_KEY_2026';
 }
