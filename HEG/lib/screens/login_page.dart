@@ -27,6 +27,58 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  Future<Map<String, dynamic>?> _fetchEmployeeDetails(String empCode) async {
+    final code = empCode.trim();
+
+    if (code.isEmpty) {
+      return null;
+    }
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse(
+              '${ApiConfig.employeeReport}/${Uri.encodeComponent(code)}',
+            ),
+            headers: {
+              'x-api-key': ApiConfig.apiKey,
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(milliseconds: 12000));
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final body = jsonDecode(response.body);
+
+      if (body is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final data = body['data'];
+
+      return data is Map<String, dynamic> ? data : body;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _firstText(List<dynamic> values, {String fallback = ''}) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+
+      if (text.isNotEmpty &&
+          text.toUpperCase() != 'NULL' &&
+          text.toUpperCase() != 'N/A') {
+        return text;
+      }
+    }
+
+    return fallback;
+  }
+
   Future<void> _onLogin() async {
     FocusScope.of(context).unfocus();
 
@@ -143,13 +195,47 @@ class _LoginPageState extends State<LoginPage> {
           mappedCategory = 'Company_Employee';
         }
 
+        final employeeDetails = await _fetchEmployeeDetails(empCodeStr) ?? {};
+
         final user = SessionUser(
-          name: empCodeStr,
+          name: _firstText([
+            employeeDetails['empName'],
+            employeeDetails['name'],
+            employeeDetails['employeeName'],
+            data['empName'],
+            data['name'],
+            empCodeStr,
+          ], fallback: empCodeStr),
           ec: empCodeStr,
-          department: '',
-          designation: mappedRole,
-          category: mappedCategory,
-          role: mappedRole, // ← store role
+          department: _firstText([
+            employeeDetails['department'],
+            employeeDetails['departmentName'],
+            employeeDetails['dept'],
+            employeeDetails['deptName'],
+            employeeDetails['DEPARTMENT'],
+            employeeDetails['DEPT'],
+            data['department'],
+            data['departmentName'],
+            data['dept'],
+            data['deptName'],
+          ], fallback: '-'),
+          designation: _firstText([
+            employeeDetails['designation'],
+            employeeDetails['designationName'],
+            employeeDetails['desig'],
+            data['designation'],
+            data['designationName'],
+            mappedRole,
+          ], fallback: mappedRole),
+          category: _firstText([
+            employeeDetails['category'],
+            employeeDetails['employeeCategory'],
+            employeeDetails['userCategory'],
+            data['category'],
+            data['employeeCategory'],
+            mappedCategory,
+          ], fallback: mappedCategory),
+          role: mappedRole,
         );
 
         await SessionStore.saveLogin(

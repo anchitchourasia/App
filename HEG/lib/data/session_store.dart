@@ -7,7 +7,7 @@ class SessionUser {
   final String department;
   final String designation;
   final String category;
-  final String role; 
+  final String role;
 
   const SessionUser({
     required this.name,
@@ -28,13 +28,61 @@ class SessionUser {
   };
 
   static SessionUser fromJson(Map<String, dynamic> j) => SessionUser(
-    name: (j['name'] ?? '').toString(),
-    ec: (j['ec'] ?? '').toString(),
-    department: (j['department'] ?? '').toString(),
-    designation: (j['designation'] ?? '').toString(),
-    category: (j['category'] ?? '').toString(),
-    role: (j['role'] ?? 'EMPLOYEE').toString(), //
+    name: _firstText([
+      j['name'],
+      j['empName'],
+      j['employeeName'],
+      j['EMP_NAME'],
+      j['EMPNAME'],
+    ]),
+    ec: _firstText([
+      j['ec'],
+      j['empNo'],
+      j['employeeCode'],
+      j['employeeId'],
+      j['EMP_NO'],
+    ]),
+    department: _firstText([
+      j['department'],
+      j['departmentName'],
+      j['dept'],
+      j['deptName'],
+      j['DEPARTMENT'],
+      j['DEPT'],
+    ]),
+    designation: _firstText([
+      j['designation'],
+      j['designationName'],
+      j['jobTitle'],
+      j['desig'],
+      j['DESIGNATION'],
+    ]),
+    category: _firstText([
+      j['category'],
+      j['employeeCategory'],
+      j['userCategory'],
+      j['empCategory'],
+    ]),
+    role: _firstText([
+      j['role'],
+      j['userRole'],
+      j['ROLE'],
+    ], fallback: 'EMPLOYEE'),
   );
+
+  static String _firstText(List<dynamic> values, {String fallback = ''}) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+
+      if (text.isNotEmpty &&
+          text.toUpperCase() != 'NULL' &&
+          text.toUpperCase() != 'N/A') {
+        return text;
+      }
+    }
+
+    return fallback;
+  }
 }
 
 class SessionStore {

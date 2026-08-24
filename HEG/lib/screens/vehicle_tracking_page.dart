@@ -689,24 +689,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
             _dataLine('Department', row.deptName),
             if (row.contractorName.isNotEmpty)
               _dataLine('Contractor', row.contractorName),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _dateBox(
-                    'Issue Date',
-                    formatDateString(row.issueDate),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _dateBox(
-                    'Validity',
-                    formatDateString(row.validityDate),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 12),
 
             // Action Buttons

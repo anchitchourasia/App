@@ -14,8 +14,6 @@ class PassRegistryItem {
   final String aadhaarNo;
   final String status;
   final String passStatus;
-  final String issueDate;
-  final String validityDate;
   final String gateNo;
 
   const PassRegistryItem({
@@ -34,8 +32,6 @@ class PassRegistryItem {
     required this.aadhaarNo,
     required this.status,
     required this.passStatus,
-    required this.issueDate,
-    required this.validityDate,
     required this.gateNo,
   });
 
@@ -71,8 +67,6 @@ class PassRegistryItem {
       aadhaarNo: (row['aadhaarNo'] ?? '').toString(),
       status: displayStatus,
       passStatus: displayStatus,
-      issueDate: (row['issueDate'] ?? '').toString(),
-      validityDate: (row['validityDate'] ?? '').toString(),
       gateNo: (row['gateNo'] ?? '').toString(),
     );
   }
