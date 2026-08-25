@@ -118,8 +118,53 @@ class PassRegistryItem {
   }
 
   bool matchesVehicleType(String filter) {
-    if (filter == 'ALL') return true;
-    return vehicleType.trim().toUpperCase() == filter.trim().toUpperCase();
+    final selected = filter.trim().toUpperCase();
+
+    if (selected.isEmpty || selected == 'ALL') {
+      return true;
+    }
+
+    final actual = vehicleType
+        .trim()
+        .toUpperCase()
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    // Direct match: CAR = CAR, JCB = JCB, etc.
+    if (actual == selected) {
+      return true;
+    }
+
+    // Handles common backend category variations.
+    switch (selected) {
+      case 'BIKE':
+      case 'SCOOTER':
+        return actual.contains('BIKE') ||
+            actual.contains('SCOOTER') ||
+            actual.contains('TWO WHEELER');
+
+      case 'CAR':
+        return actual.contains('CAR') || actual.contains('FOUR WHEELER');
+
+      case 'TRUCK':
+        return actual.contains('TRUCK') || actual.contains('HEAVY VEHICLE');
+
+      case 'DUMPER':
+        return actual.contains('DUMPER');
+
+      case 'JCB':
+        return actual.contains('JCB');
+
+      case 'CRANE':
+        return actual.contains('CRANE');
+
+      case 'TRACTOR':
+        return actual.contains('TRACTOR');
+
+      default:
+        return false;
+    }
   }
 
   bool get canEdit {

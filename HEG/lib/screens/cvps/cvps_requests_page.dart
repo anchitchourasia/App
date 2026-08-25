@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../widgets/heg_app_bar.dart';
 import '../../data/cvps_api.dart';
+import '../../data/gate_log_api.dart';
+import '../../data/session_store.dart';
 import '../../models/cvps_request_item.dart';
 // The list page no longer needs cvps_document, cvps_driver, cvps_history_entry,
 // or cvps_pass_pdf_service, because PDF is generated from CvpsPassPage.
@@ -88,17 +90,54 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
 
     try {
       final rows = await api.fetchAllRequests();
+
+      if (!mounted) return;
+
       setState(() {
         allRows = rows;
         _applyFilters();
         loading = false;
       });
+
+      await _loadGateActionsForApprovedRows(rows);
     } catch (e) {
       setState(() {
         hasError = true;
         errorMessage = e.toString();
         loading = false;
       });
+    }
+  }
+
+  Future<void> _loadGateActionsForApprovedRows(
+    List<CvpsRequestItem> rows,
+  ) async {
+    final approvedRows = rows.where(
+      (row) => row.reqStatus.trim().toUpperCase() == 'APPROVED',
+    );
+
+    for (final row in approvedRows) {
+      try {
+        final lastAction = await GateLogApi.getLatestAction(row.requestNo);
+
+        if (!mounted) return;
+
+        setState(() {
+          if (lastAction == null) {
+            _lastGateActionByRequest.remove(row.requestNo);
+          } else {
+            _lastGateActionByRequest[row.requestNo] = lastAction;
+          }
+        });
+      } catch (_) {
+        if (!mounted) return;
+
+        setState(() {
+          // Unknown backend state: do not assume IN is safe.
+          // Use a special state so neither IN nor OUT is displayed.
+          _lastGateActionByRequest[row.requestNo] = 'UNKNOWN';
+        });
+      }
     }
   }
 
@@ -227,34 +266,64 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
       return;
     }
 
-    setState(() {
-      _gateActionLoading.add(row.requestNo);
-    });
+    final enterBy = SessionStore.currentUser?.ec.trim() ?? '';
 
-    // UI-only simulation. No API/database request is made.
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted) {
+    if (enterBy.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFFB91C1C),
+          content: Text('Logged-in employee code is missing.'),
+        ),
+      );
       return;
     }
 
     setState(() {
-      _gateActionLoading.remove(row.requestNo);
-      _lastGateActionByRequest[row.requestNo] = normalizedAction;
+      _gateActionLoading.add(row.requestNo);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: normalizedAction == 'IN'
-            ? const Color(0xFF15803D)
-            : const Color(0xFFB91C1C),
-        content: Text(
-          'Gate $normalizedAction completed locally for '
-          'Permission No. ${row.requestNo}.',
+    try {
+      await GateLogApi.saveAction(
+        permissionNo: row.requestNo,
+        action: normalizedAction,
+        enterBy: enterBy,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _lastGateActionByRequest[row.requestNo] = normalizedAction;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: normalizedAction == 'IN'
+              ? const Color(0xFF15803D)
+              : const Color(0xFFB91C1C),
+          content: Text(
+            'Gate $normalizedAction saved to dummy database for '
+            'Permission No. ${row.requestNo}.',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFFB91C1C),
+          content: Text('Could not save Gate $normalizedAction: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _gateActionLoading.remove(row.requestNo);
+        });
+      }
+    }
   }
 
   @override
@@ -477,6 +546,9 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     final isGateActionLoading = _gateActionLoading.contains(row.requestNo);
 
     final lastGateAction = _lastGateActionByRequest[row.requestNo];
+    final showInButton = lastGateAction == null || lastGateAction == 'OUT';
+    final showOutButton = lastGateAction == 'IN';
+    final gateStateUnavailable = lastGateAction == 'UNKNOWN';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -611,7 +683,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                     background: const Color(0xFFEFFDF5),
                     onTap: () => _viewPass(row),
                   ),
-                if (isApproved)
+                if (isApproved && !gateStateUnavailable && showInButton)
                   _actionButton(
                     label: isGateActionLoading ? 'Please wait...' : 'IN',
                     icon: isGateActionLoading
@@ -623,7 +695,8 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                         ? () {}
                         : () => _recordGateAction(row, 'IN'),
                   ),
-                if (isApproved)
+
+                if (isApproved && !gateStateUnavailable && showOutButton)
                   _actionButton(
                     label: isGateActionLoading ? 'Please wait...' : 'OUT',
                     icon: isGateActionLoading
@@ -638,12 +711,43 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
               ],
             ),
 
-            if (isApproved && lastGateAction != null) ...[
+            if (isApproved && gateStateUnavailable) ...[
+              const SizedBox(height: 10),
+              _gateStateUnavailableStatus(),
+            ] else if (isApproved && lastGateAction != null) ...[
               const SizedBox(height: 10),
               _localGateActionStatus(lastGateAction),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _gateStateUnavailableStatus() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFC2410C)),
+          SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              'Gate status could not be verified. Pull down to refresh.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFC2410C),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -679,7 +783,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
           ),
           const Spacer(),
           const Text(
-            'UI demo',
+            'Saved',
             style: TextStyle(
               fontSize: 10,
               color: textSecondary,

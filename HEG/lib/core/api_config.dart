@@ -4,6 +4,11 @@ class ApiConfig {
   static const String baseUrl = AppConfig.apiBaseUrl;
   static const String apiKey = AppConfig.apiKey;
 
+  // Temporary dummy backend configuration for mobile IN / OUT Gate Log.
+  static const String dummyGateLogBaseUrl = AppConfig.dummyGateLogBaseUrl;
+
+  static const String dummyGateLogApiKey = AppConfig.dummyGateLogApiKey;
+
   static const String cvpsBaseUrl = AppConfig.cvpsBaseUrl;
 
   // static const String dummyGateLogBaseUrl = AppConfig.dummyGateLogBaseUrl;
@@ -25,7 +30,7 @@ class ApiConfig {
   static String documentsDownload = '$baseUrl/api/passes/documents/download';
 
   // Dummy backend endpoint used only by approved CVPS request IN/OUT buttons.
-  // static String dummyCvpsGateLogs = '$dummyGateLogBaseUrl/api/gate-logs';
+  static String dummyCvpsGateLogs = '$dummyGateLogBaseUrl/api/gate-logs';
 
   // CVPS (existing)
   static String cvpsBase = '$cvpsBaseUrl/api/requests';
