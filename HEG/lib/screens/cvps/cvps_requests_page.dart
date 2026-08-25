@@ -1,6 +1,7 @@
 /// CVPS Vehicle Permission list screen.
 /// Mirrors vehicle-permission-list.ts and uses same Pass Registry UI style.
 library;
+
 import 'package:flutter/material.dart';
 
 import '../../widgets/heg_app_bar.dart';
@@ -33,6 +34,9 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   bool loading = true;
   bool hasError = false;
   String errorMessage = '';
+
+  final Set<int> _gateActionLoading = <int>{};
+  final Map<int, String> _lastGateActionByRequest = <int, String>{};
 
   // Filter state: search string and status.
   String searchText = '';
@@ -208,6 +212,51 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     );
   }
 
+  Future<void> _recordGateAction(CvpsRequestItem row, String action) async {
+    final normalizedAction = action.trim().toUpperCase();
+
+    if (normalizedAction != 'IN' && normalizedAction != 'OUT') {
+      return;
+    }
+
+    if (row.reqStatus.trim().toUpperCase() != 'APPROVED') {
+      return;
+    }
+
+    if (_gateActionLoading.contains(row.requestNo)) {
+      return;
+    }
+
+    setState(() {
+      _gateActionLoading.add(row.requestNo);
+    });
+
+    // UI-only simulation. No API/database request is made.
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _gateActionLoading.remove(row.requestNo);
+      _lastGateActionByRequest[row.requestNo] = normalizedAction;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: normalizedAction == 'IN'
+            ? const Color(0xFF15803D)
+            : const Color(0xFFB91C1C),
+        content: Text(
+          'Gate $normalizedAction completed locally for '
+          'Permission No. ${row.requestNo}.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -377,7 +426,9 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            initialValue: statusOptions.contains(statusFilter) ? statusFilter : 'ALL',
+            initialValue: statusOptions.contains(statusFilter)
+                ? statusFilter
+                : 'ALL',
             isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Status',
@@ -421,6 +472,12 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   Widget _buildRequestCard(CvpsRequestItem row) {
     final badgeColor = _getStatusColor(row.reqStatus);
 
+    final isApproved = row.reqStatus.trim().toUpperCase() == 'APPROVED';
+
+    final isGateActionLoading = _gateActionLoading.contains(row.requestNo);
+
+    final lastGateAction = _lastGateActionByRequest[row.requestNo];
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -443,7 +500,6 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Status stripe
                 Container(
                   width: 5,
                   height: 56,
@@ -453,7 +509,6 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Vehicle + meta
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,7 +544,6 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -535,7 +589,9 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
               ],
             ),
             const SizedBox(height: 12),
-            // Action buttons: View + View Pass (when Approved)
+
+            // View always appears.
+            // View Pass, IN, and OUT appear only for APPROVED requests.
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -547,7 +603,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                   background: const Color(0xFFEAF2FF),
                   onTap: () => _viewRequest(row),
                 ),
-                if (row.reqStatus.trim().toUpperCase() == 'APPROVED')
+                if (isApproved)
                   _actionButton(
                     label: 'View Pass',
                     icon: Icons.picture_as_pdf_outlined,
@@ -555,10 +611,82 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
                     background: const Color(0xFFEFFDF5),
                     onTap: () => _viewPass(row),
                   ),
+                if (isApproved)
+                  _actionButton(
+                    label: isGateActionLoading ? 'Please wait...' : 'IN',
+                    icon: isGateActionLoading
+                        ? Icons.hourglass_top
+                        : Icons.login,
+                    foreground: const Color(0xFF15803D),
+                    background: const Color(0xFFDCFCE7),
+                    onTap: isGateActionLoading
+                        ? () {}
+                        : () => _recordGateAction(row, 'IN'),
+                  ),
+                if (isApproved)
+                  _actionButton(
+                    label: isGateActionLoading ? 'Please wait...' : 'OUT',
+                    icon: isGateActionLoading
+                        ? Icons.hourglass_top
+                        : Icons.logout,
+                    foreground: const Color(0xFFB91C1C),
+                    background: const Color(0xFFFEE2E2),
+                    onTap: isGateActionLoading
+                        ? () {}
+                        : () => _recordGateAction(row, 'OUT'),
+                  ),
               ],
             ),
+
+            if (isApproved && lastGateAction != null) ...[
+              const SizedBox(height: 10),
+              _localGateActionStatus(lastGateAction),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _localGateActionStatus(String action) {
+    final isIn = action == 'IN';
+
+    final foreground = isIn ? const Color(0xFF15803D) : const Color(0xFFB91C1C);
+
+    final background = isIn ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2);
+
+    final border = isIn ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        children: [
+          Icon(isIn ? Icons.login : Icons.logout, size: 16, color: foreground),
+          const SizedBox(width: 7),
+          Text(
+            'Gate Action: $action',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: foreground,
+            ),
+          ),
+          const Spacer(),
+          const Text(
+            'UI demo',
+            style: TextStyle(
+              fontSize: 10,
+              color: textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

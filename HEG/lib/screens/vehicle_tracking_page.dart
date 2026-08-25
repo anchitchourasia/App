@@ -6,7 +6,6 @@ import '../models/pass_registry_item.dart';
 import '../widgets/heg_app_bar.dart';
 import 'pass_entry/pass_entry_page.dart';
 import 'vpms/pass_sticker/pass_sticker_page.dart';
-import '../data/session_store.dart';
 
 class VehicleTrackingPage extends StatefulWidget {
   const VehicleTrackingPage({super.key});
@@ -222,16 +221,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     }
   }
 
-  void _openAddPassForm() async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const PassEntryPage(),
-    );
-    loadPasses();
-  }
-
   void viewPass(PassRegistryItem row) {
     showModalBottomSheet(
       context: context,
@@ -252,44 +241,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
     );
   }
 
-  void editPass(PassRegistryItem row) async {
-    // Prevent Approvers from editing
-    if (SessionStore.currentUser?.role == 'APPROVER') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Approvers cannot edit passes'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PassEntryPage(
-        registryId: row.passId, // id from backend
-        isViewMode: false,
-        isApproverMode: false,
-      ),
-    );
-    loadPasses();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: const HegAppBar(title: 'Pass Registry'),
-      floatingActionButton: SessionStore.currentUser?.role == 'APPROVER'
-          ? null
-          : FloatingActionButton(
-              onPressed: _openAddPassForm,
-              backgroundColor: accentTeal,
-              child: const Icon(Icons.add),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -572,24 +528,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
 
   Widget _buildPassCard(PassRegistryItem row) {
     final badgeColor = statusColor(row.status);
-    final isApprover =
-        SessionStore.currentUser?.role == 'APPROVER'; // ← ADDED THIS APPROVER
 
-    // 1. Clean status string
     final statusUpper = row.status.trim().toUpperCase();
 
-    // 2. Sticker button shows ONLY when ACTIVE or APPROVED
+    // Sticker is available only for Active/Approved passes.
     final showSticker = statusUpper == 'ACTIVE' || statusUpper == 'APPROVED';
-
-    // 3. Edit button shows ONLY for Draft / Modification states
-    // (Explicitly excluded for ACTIVE, APPROVED, and SUBMITTED)
-    // NOTE: Approver check is done in the Wrap children below
-    final showEdit =
-        statusUpper == 'DRAFT' ||
-        statusUpper == 'SAVED' ||
-        statusUpper == 'MODIFY' ||
-        statusUpper == 'NEEDS_MODIFICATION' ||
-        statusUpper == 'NEEDSMODIFICATION';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -691,8 +634,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               _dataLine('Contractor', row.contractorName),
             const SizedBox(height: 12),
 
-            // Action Buttons
-            // Action Buttons
+            // Read-only actions only.
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -711,15 +653,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                     foreground: const Color(0xFF334155),
                     background: const Color(0xFFF1F5F9),
                     onTap: () => printSticker(row),
-                  ),
-                // Edit button: ONLY show if NOT approver AND status allows editing
-                if (!isApprover && showEdit)
-                  _actionButton(
-                    label: 'Edit',
-                    icon: Icons.edit_outlined,
-                    foreground: accentDark,
-                    background: const Color(0xFFEAF2FF),
-                    onTap: () => editPass(row),
                   ),
               ],
             ),

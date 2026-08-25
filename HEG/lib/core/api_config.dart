@@ -6,6 +6,8 @@ class ApiConfig {
 
   static const String cvpsBaseUrl = AppConfig.cvpsBaseUrl;
 
+  // static const String dummyGateLogBaseUrl = AppConfig.dummyGateLogBaseUrl;
+
   // AUTH
   static String authorityByEmp = '$baseUrl/api/authority';
   static String authorityUpdate = '$baseUrl/api/authority/update';
@@ -22,9 +24,8 @@ class ApiConfig {
   // DOCUMENTS DOWNLOAD
   static String documentsDownload = '$baseUrl/api/passes/documents/download';
 
-  // GATE / COMPLIANCE
-  static String gateLogs = '$baseUrl/api/gate-logs/list';
-  static String compliance = '$baseUrl/api/compliance/list';
+  // Dummy backend endpoint used only by approved CVPS request IN/OUT buttons.
+  // static String dummyCvpsGateLogs = '$dummyGateLogBaseUrl/api/gate-logs';
 
   // CVPS (existing)
   static String cvpsBase = '$cvpsBaseUrl/api/requests';
