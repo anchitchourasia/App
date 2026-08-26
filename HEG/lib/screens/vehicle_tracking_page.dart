@@ -111,14 +111,33 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
           row.matchesVehicleType(filterVehicleType);
     }).toList();
 
-    final totalPages = (filteredPasses.length / pageSize).ceil();
-    if (currentPage > totalPages) currentPage = totalPages;
+    // Keep pagination valid even when no records match the filters.
+    final calculatedPages = (filteredPasses.length / pageSize).ceil();
+    final safeTotalPages = calculatedPages == 0 ? 1 : calculatedPages;
+
+    if (currentPage > safeTotalPages) {
+      currentPage = safeTotalPages;
+    }
+
+    if (currentPage < 1) {
+      currentPage = 1;
+    }
   }
 
   List<PassRegistryItem> get pagedPasses {
-    final start = (currentPage - 1) * pageSize;
+    if (filteredPasses.isEmpty) {
+      return [];
+    }
+
+    final safePage = currentPage < 1 ? 1 : currentPage;
+    final start = (safePage - 1) * pageSize;
+
+    if (start >= filteredPasses.length) {
+      return [];
+    }
+
     final end = start + pageSize;
-    if (start >= filteredPasses.length) return [];
+
     return filteredPasses.sublist(
       start,
       end > filteredPasses.length ? filteredPasses.length : end,
@@ -133,10 +152,8 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
   int get activeCount =>
       allPasses.where((e) => e.status.trim().toUpperCase() == 'ACTIVE').length;
 
-  int get draftCount => allPasses.where((e) {
-    final s = e.status.trim().toUpperCase();
-    return s == 'DRAFT' || s == 'SAVED';
-  }).length;
+  int get savedCount =>
+      allPasses.where((e) => e.status.trim().toUpperCase() == 'SAVED').length;
 
   int get rejectCount => allPasses.where((e) {
     final s = e.status.trim().toUpperCase();
@@ -198,7 +215,6 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
 
   Color statusColor(String status) {
     switch (status.trim().toUpperCase()) {
-      case 'DRAFT':
       case 'SAVED':
         return const Color(0xFF2563EB);
       case 'SUBMITTED':
@@ -325,7 +341,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
               const SizedBox(width: 8),
               Expanded(child: _summaryStat('Active', activeCount.toString())),
               const SizedBox(width: 8),
-              Expanded(child: _summaryStat('Draft', draftCount.toString())),
+              Expanded(child: _summaryStat('Saved', savedCount.toString())),
               const SizedBox(width: 8),
               Expanded(child: _summaryStat('Reject', rejectCount.toString())),
             ],
@@ -455,7 +471,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage> {
                 child: _buildDropdown('Status', filterStatus, [
                   'ALL',
                   'ACTIVE',
-                  'DRAFT',
+                  'SAVED',
                   'SUBMITTED',
                   'REJECT',
                   'NEEDSMODIFICATION',
@@ -976,7 +992,7 @@ class EmptyState extends StatelessWidget {
           Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
           SizedBox(height: 10),
           Text(
-            'No pass records found',
+            'No matching pass records',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -985,7 +1001,7 @@ class EmptyState extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'Try changing search text or filter values.',
+            'No records match the current filters. Change a filter or choose ALL.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Color(0xFF627D98),

@@ -273,7 +273,40 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _parkingToBeUsed = (data['parkingToBeUsed'] ?? '').toString();
           _status = (data['reqStatus'] ?? 'DRAFT').toString();
           _passNo = data['passNo'] as int?;
-          _enterBy = (data['enterBy'] ?? '').toString();
+          // ---------------------------------------------------------
+          // NEW FIX: Bulletproof parser with Web-UI Fallbacks
+          // ---------------------------------------------------------
+          String parsedEnterBy = '';
+          data.forEach((key, value) {
+            if (value != null) {
+              final normalizedKey = key.toString().toLowerCase().replaceAll(
+                '_',
+                '',
+              );
+
+              if (normalizedKey == 'enterby' ||
+                  normalizedKey == 'enteredby' ||
+                  normalizedKey == 'createdby' ||
+                  normalizedKey == 'creator') {
+                final valStr = value.toString().trim();
+                if (valStr.toLowerCase() != 'null' && valStr.isNotEmpty) {
+                  parsedEnterBy = valStr;
+                }
+              }
+            }
+          });
+
+          // If the backend genuinely returns empty/null for this record,
+          // fallback to the Employee's Code or 'SYSTEM' to prevent the '-' issue.
+          if (parsedEnterBy.isEmpty) {
+            final fallback = data['employeeNo'] ?? 'SYSTEM';
+            parsedEnterBy = fallback.toString().trim();
+          }
+
+          _enterBy = parsedEnterBy;
+          // ---------------------------------------------------------
+          // ---------------------------------------------------------
+          // ---------------------------------------------------------
 
           final docsJson = data['documents'] as List?;
           if (docsJson != null && docsJson.isNotEmpty) {
