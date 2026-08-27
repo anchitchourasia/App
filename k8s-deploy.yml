@@ -1,0 +1,13 @@
+---
+- name: Deploy HEG Backend to Kubernetes
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Apply Kubernetes Manifest
+      ansible.builtin.template:
+        src: k8s-manifest.yml
+        dest: /tmp/k8s-manifest-rendered.yml
+
+    - name: Deploy to Cluster
+      ansible.builtin.command:
+        cmd: kubectl apply -f /tmp/k8s-manifest-rendered.yml

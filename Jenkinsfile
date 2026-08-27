@@ -21,8 +21,11 @@ pipeline {
         ANDROID_SDK_ROOT = 'C:\\Users\\heg\\AppData\\Local\\Android\\Sdk'
         PUB_CACHE        = 'C:\\flutter\\.pub-cache'
 
-        DOCKER_IMAGE = 'heg-backend'
-        DOCKER_TAG   = "build-${BUILD_NUMBER}"
+        // Nexus & Docker Configuration
+        NEXUS_REGISTRY = 'nexus.local:8081'
+        DOCKER_IMAGE   = 'heg-backend'
+        DOCKER_TAG     = "build-${BUILD_NUMBER}"
+        FULL_IMAGE_URI = "${env.NEXUS_REGISTRY}/${env.DOCKER_IMAGE}:${env.DOCKER_TAG}"
     }
 
     stages {
@@ -86,14 +89,6 @@ set ANDROID_HOME=%ANDROID_HOME%
 set ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
 set PUB_CACHE=%PUB_CACHE%
 
-echo ==== EFFECTIVE ENV ====
-echo http_proxy=%http_proxy%
-echo https_proxy=%https_proxy%
-echo no_proxy=%no_proxy%
-echo ANDROID_HOME=%ANDROID_HOME%
-echo ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-echo PUB_CACHE=%PUB_CACHE%
-
 echo ==== START flutter doctor ====
 call flutter doctor -v
 if errorlevel 1 exit /b 1
@@ -155,13 +150,18 @@ echo APK_FOUND
             }
         }
 
-        stage('Docker Build - Backend') {
+        stage('Docker Build & Push to Nexus') {
             steps {
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'proxy-creds',
                         usernameVariable: 'PUSER',
                         passwordVariable: 'PPASS'
+                    ),
+                    usernamePassword(
+                        credentialsId: 'nexus-creds',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
                     )
                 ]) {
                     dir("${env.BACKEND_DIR}") {
@@ -171,42 +171,26 @@ echo APK_FOUND
                               --build-arg HTTP_PROXY=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT% ^
                               --build-arg HTTPS_PROXY=http://%PUSER%:%PPASS%@%PROXY_HOST%:%PROXY_PORT% ^
                               --build-arg NO_PROXY=%NO_PROXY_VALUE% ^
-                              -t %DOCKER_IMAGE%:%DOCKER_TAG% .
-                            docker tag %DOCKER_IMAGE%:%DOCKER_TAG% %DOCKER_IMAGE%:latest
-                            echo ====== Docker Build Done ======
+                              -t %FULL_IMAGE_URI% .
+                            docker tag %FULL_IMAGE_URI% %NEXUS_REGISTRY%/%DOCKER_IMAGE%:latest
+
+                            echo ====== Logging into Nexus Registry ======
+                            docker login %NEXUS_REGISTRY% -u %NEXUS_USER% -p %NEXUS_PASS%
+
+                            echo ====== Pushing Image to Nexus ======
+                            docker push %FULL_IMAGE_URI%
+                            docker push %NEXUS_REGISTRY%/%DOCKER_IMAGE%:latest
                         """
                     }
                 }
             }
         }
 
-        // ✅ UPDATED: Kill port 8080 before starting container
-        stage('Docker Run - Backend') {
-            steps {
-                dir("${env.BACKEND_DIR}") {
-                    bat """
-                        echo ====== Stopping existing container and freeing port 8080 ======
-                        docker compose down --remove-orphans
-
-                        FOR /F "tokens=5" %%P IN ('netstat -ano ^| findstr :8080 ^| findstr LISTENING') DO (
-                            echo Killing PID %%P on port 8080
-                            taskkill /PID %%P /F 2>nul || echo No process killed
-                        )
-
-                        echo ====== Starting Backend Container ======
-                        docker compose up -d
-                        echo ====== Backend Container Started ======
-                    """
-                }
-            }
-        }
-
-        stage('Docker Verify - Backend') {
+        stage('Deploy to Kubernetes via Ansible') {
             steps {
                 bat """
-                    echo ====== Verifying Docker Image ======
-                    docker images %DOCKER_IMAGE%
-                    echo ====== Docker Image Verified ======
+                    echo ====== Deploying Backend to Kubernetes ======
+                    ansible-playbook k8s-deploy.yml --extra-vars "app_image=%FULL_IMAGE_URI%"
                 """
             }
         }
@@ -222,7 +206,7 @@ echo APK_FOUND
 
     post {
         success {
-            echo 'SUCCESS: Backend JAR, Flutter APK, and Docker image built successfully!'
+            echo 'SUCCESS: Backend JAR, Flutter APK, Docker Image pushed to Nexus, and deployed to Kubernetes successfully!'
         }
         failure {
             echo 'FAILED: Check Console Output for errors.'

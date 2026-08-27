@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heg-backend-deployment
+  labels:
+    app: heg-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: heg-backend
+  template:
+    metadata:
+      labels:
+        app: heg-backend
+    spec:
+      containers:
+      - name: backend
+        image: {{ app_image }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+      # 👇 ADD THESE TWO LINES 👇
+      imagePullSecrets:
+      - name: nexus-secret
