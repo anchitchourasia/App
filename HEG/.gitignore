@@ -59,6 +59,12 @@ gradle-*-all.zip
 **/HEG/build/
 .pub-cache/
 # Allow placeholder .env in assets (real values injected by Jenkins)
-!assets/.env
 .vscode/
 HEG/devtools_options.yaml
+
+# --- Private local configuration: never commit ---
+HEG/lib/core/app_config.dart
+HEG/assets/.env
+.env
+.env.*
+!.env.example
