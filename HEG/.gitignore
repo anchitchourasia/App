@@ -64,6 +64,7 @@ HEG/devtools_options.yaml
 
 # --- Private local configuration: never commit ---
 HEG/lib/core/app_config.dart
+HEG/lib/core/api_config.dart
 HEG/assets/.env
 .env
 .env.*

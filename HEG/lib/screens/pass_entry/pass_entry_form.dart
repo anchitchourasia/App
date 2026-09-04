@@ -52,6 +52,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String _empAadhar = '';
   String _empContractorCode = '';
   String _empContractorName = '';
+  String _empMobile = '';
 
   // ── Pass Details ────────────────────────────────────────────────
   String _gateNo = '';
@@ -211,6 +212,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _empName = (data['name'] ?? '').toString();
           _empDept = (data['deptName'] ?? '').toString().toUpperCase();
           _empDeptCode = (data['deptCode'] ?? '').toString();
+          _empMobile = (data['mobileNo'] ?? '').toString().trim();
           _empAadhar = (data['aadhaarNo'] ?? data['aadharNo'] ?? '').toString();
           _empContractorCode = (data['contractorCode'] ?? '').toString();
           _empContractorName = (data['contractorName'] ?? '').toString();
@@ -238,6 +240,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
       _empName = '';
       _empDept = '';
       _empDeptCode = '';
+      _empMobile = '';
       _empAadhar = '';
       _empContractorCode = '';
       _empContractorName = '';
@@ -1078,8 +1081,28 @@ class _PassEntryFormState extends State<PassEntryForm> {
         children: [
           _summaryRow('Employee', _empName.isEmpty ? '—' : _empName),
           const SizedBox(height: 8),
+
           _summaryRow('Department', _empDept.isEmpty ? '—' : _empDept),
           const SizedBox(height: 8),
+
+          _summaryRow(
+            'Department Code',
+            _empDeptCode.isEmpty ? '—' : _empDeptCode,
+          ),
+          const SizedBox(height: 8),
+
+          _summaryRow('Mobile Number', _empMobile.isEmpty ? '—' : _empMobile),
+          const SizedBox(height: 8),
+
+          _summaryRow('Aadhar Number', _empAadhar.isEmpty ? '—' : _empAadhar),
+          const SizedBox(height: 8),
+
+          _summaryRow(
+            'Contractor Code',
+            _empContractorCode.isEmpty ? '—' : _empContractorCode,
+          ),
+          const SizedBox(height: 8),
+
           _summaryRow(
             'Contractor',
             _empContractorName.isEmpty ? '—' : _empContractorName,
