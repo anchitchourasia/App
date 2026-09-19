@@ -353,30 +353,79 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
       }
 
       // 3) Workflow history: cvps.getRequestHistory(requestNo)
+      // 3. Workflow history
       try {
         final history = await api.fetchRequestHistory(no);
+
         remarksHistory = history.map((raw) {
-          final m = raw;
+          final m = raw as Map<String, dynamic>;
+
           return _WorkflowRemarkEntry(
-            stage: _safeString(m['stage']),
-            action: _safeString(m['actionTaken']),
-            remark: _safeString(m['remarks']),
-            byName: _safeString(m['empNo']),
-            byEmpCode: _safeString(m['empNo']),
-            createdAt: _formatDateTime(m['actionDate']),
+            stage: (m['stage'] ?? '').toString(),
+            action: (m['actionTaken'] ?? '').toString(),
+            remark: (m['remarks'] ?? '').toString(),
+            byName: (m['empNo'] ?? '').toString(),
+            byEmpCode: (m['empNo'] ?? '').toString(),
+            createdAt: (m['actionDate'] ?? '').toString(),
           );
         }).toList();
 
-        // Sort by createdAt ascending (same as TS).
+        // Keep existing history sort order.
         remarksHistory.sort((a, b) {
           final ta =
               DateTime.tryParse(a.createdAt) ??
               DateTime.fromMillisecondsSinceEpoch(0);
+
           final tb =
               DateTime.tryParse(b.createdAt) ??
               DateTime.fromMillisecondsSinceEpoch(0);
+
           return ta.compareTo(tb);
         });
+
+        // Only added logic:
+        // Replace EC/contractor code with the actor name for display.
+        for (var i = 0; i < remarksHistory.length; i++) {
+          final item = remarksHistory[i];
+          final code = item.byEmpCode.trim();
+
+          if (code.isEmpty || code.toUpperCase() == 'SYSTEM') {
+            continue;
+          }
+
+          String? actorName;
+
+          try {
+            // Uploader contractor code, example: G20327.
+            if (code.toUpperCase().startsWith('G')) {
+              final contractor = await api.fetchContractorDetails(code);
+
+              actorName = (contractor?['contractorName'] ?? contractor?['name'])
+                  ?.toString()
+                  .trim();
+            } else {
+              // Employee codes: confirmer, verifier, approver.
+              actorName = await api.fetchEmployeeName(code);
+            }
+          } catch (_) {
+            // Keep employee/contractor code when name API fails.
+            continue;
+          }
+
+          if (actorName == null || actorName.trim().isEmpty) {
+            continue;
+          }
+
+          // Rebuild only the current private workflow item with actual name.
+          remarksHistory[i] = _WorkflowRemarkEntry(
+            stage: item.stage,
+            action: item.action,
+            remark: item.remark,
+            byName: actorName.trim(),
+            byEmpCode: item.byEmpCode,
+            createdAt: item.createdAt,
+          );
+        }
       } catch (_) {
         remarksHistory = [];
       }
@@ -1089,50 +1138,75 @@ class _CvpsFormPageState extends State<CvpsFormPage> {
             style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
           )
         else
-          Column(children: remarksHistory.map(_buildWorkflowCard).toList()),
+          SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: remarksHistory.map(_buildWorkflowCard).toList(),
+            ),
+          ),
       ],
     );
   }
 
-  /// Single workflow remark card (stage + action + remark).
+  /// Single workflow remark card.
   Widget _buildWorkflowCard(_WorkflowRemarkEntry r) {
+    final actorName = r.byName.trim().isEmpty
+        ? r.byEmpCode.trim()
+        : r.byName.trim();
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${r.stage} - ${r.action}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF111827),
+              Expanded(
+                child: Text(
+                  '$actorName - ${r.action}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1F2937),
+                  ),
                 ),
-              ),
-              Text(
-                r.createdAt,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           Text(
-            '${r.byName} (${r.byEmpCode})',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+            'Code: ${r.byEmpCode}  •  ${r.createdAt}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.25,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           Text(
-            r.remark.isEmpty ? '—' : r.remark,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF111827)),
+            r.remark.trim().isEmpty ? '—' : r.remark.trim(),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.3,
+              color: Color(0xFF374151),
+            ),
           ),
         ],
       ),
