@@ -101,8 +101,21 @@ class SessionStore {
   /// Returns the logged-in user's display name (used by ChatBubbleButton)
   static String? get employeeName => currentUser?.name;
 
-  /// Returns 'admin' or the employee's EC number as chat receiver ID
-  static String get chatReceiverId => isAdmin ? 'all' : 'admin';
+  /// True only for the real technical chat administrator.
+  /// An APPROVER must use normal Admin Support chat.
+  /// Only the designated support/admin account can access the employee inbox.
+  /// An APPROVER is not a chat administrator, even if SessionStore.isAdmin is true.
+  static bool get isChatAdmin {
+    final userId = (currentUserId ?? '').trim().toLowerCase();
+
+    // Replace/add actual official admin account IDs if required.
+    const chatAdminIds = <String>{'admin'};
+
+    return chatAdminIds.contains(userId);
+  }
+
+  /// Normal users—including APPROVER—send messages to Admin Support.
+  static String get chatReceiverId => isChatAdmin ? 'all' : 'admin';
   // ───────────────────────────────────────────────────────────────
 
   // Call this once at app start

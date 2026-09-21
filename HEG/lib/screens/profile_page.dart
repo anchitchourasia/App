@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/session_store.dart';
-import '../widgets/notification_bell.dart';
+
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -103,7 +103,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Profile'),
-        actions: const [NotificationBell(), SizedBox(width: 8)],
+        
       ),
       body: Container(
         decoration: const BoxDecoration(

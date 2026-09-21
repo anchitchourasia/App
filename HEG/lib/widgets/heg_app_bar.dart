@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'notification_bell.dart';
+
 
 class HegAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -43,7 +43,6 @@ class _BellPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: const NotificationBell(),
-    );
+          );
   }
 }

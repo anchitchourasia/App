@@ -302,7 +302,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
               ? const Color(0xFF15803D)
               : const Color(0xFFB91C1C),
           content: Text(
-            'Gate $normalizedAction saved to dummy database for '
+            'Gate $normalizedAction saved to  database for '
             'Permission No. ${row.requestNo}.',
           ),
         ),

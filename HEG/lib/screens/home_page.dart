@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../widgets/notification_bell.dart';
 import '../widgets/chat_bubble_button.dart';
 import '../data/session_store.dart';
-import '../data/notification_store.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,21 +15,6 @@ class HomePage extends StatefulWidget {
     _MenuItem('My Profile', Icons.person, '/profile'),
     _MenuItem('Pass System', Icons.directions_car, '/vehicleTracking'),
     _MenuItem('Permission System', Icons.receipt_long, '/cvpsRequests'),
-
-    // Below items will stay visible but non-clickable
-    _MenuItem('Attendance', Icons.event_available, '/attendance'),
-    _MenuItem('Employees', Icons.groups_2, '/employees'),
-    _MenuItem('Settings', Icons.settings, '/settings'),
-    _MenuItem('Insurance Upload', Icons.upload_file, '/insuranceUpload'),
-    _MenuItem('Leave Apply', Icons.event_note, '/leaveApply'),
-    _MenuItem('Self Service Portal', Icons.support_agent, '/selfServicePortal'),
-    _MenuItem('Overtime Management', Icons.timelapse, '/overtimeManagement'),
-    _MenuItem(
-      'Manpower Dashboard',
-      Icons.dashboard_customize,
-      '/manpowerDashboard',
-    ),
-    _MenuItem('Applicants', Icons.badge, '/applicants'),
   ];
 
   @override
@@ -47,16 +30,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await NotificationStore.refreshUnreadCount();
       _startPolling();
     });
   }
 
   void _startPolling() {
     _notifTimer?.cancel();
-    _notifTimer = Timer.periodic(const Duration(seconds: 8), (_) {
-      NotificationStore.refreshUnreadCount();
-    });
+    _notifTimer = Timer.periodic(const Duration(seconds: 8), (_) {});
   }
 
   void _stopPolling() {
@@ -67,7 +47,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      NotificationStore.refreshUnreadCount();
       _startPolling();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
@@ -85,7 +64,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _logout(BuildContext context) async {
     await SessionStore.logout();
-    NotificationStore.resetLocal();
+
     if (!context.mounted) return;
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
@@ -96,12 +75,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final String currentUserId = SessionStore.employeeId ?? 'emp_001';
     final String currentUserName = SessionStore.employeeName ?? 'Employee';
 
-    // ✅ Role check (set this in SessionStore)
-    final bool isAdmin = SessionStore.isAdmin ?? (currentUserId == 'admin');
-
-    // ✅ For employee: receiver is admin
-    // ✅ For admin: receiver can be 'all' (button opens AdminChatList anyway)
-    final String receiverId = isAdmin ? 'all' : 'admin';
+    // APPROVER is a business workflow role, not a technical chat administrator.
+    // Therefore, approvers must use the same simple Admin Support chat as employees.
+    final bool isAdmin = SessionStore.isChatAdmin;
+    final String receiverId = SessionStore.chatReceiverId;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -110,7 +87,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         title: const Text('HEG HRMS'),
         backgroundColor: const Color.fromARGB(255, 235, 240, 239),
         elevation: 0,
-        actions: const [NotificationBell()],
       ),
 
       // ✅ Chat FAB
