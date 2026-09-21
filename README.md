@@ -17,6 +17,16 @@
 
 ---
 
+## 📦 Deployment
+
+> **Deploying the mobile app onto the company network?**
+> See **[DEPLOYMENT.md](DEPLOYMENT.md)** — the secure DMZ / API‑gateway deployment plan.
+> It covers the executive summary, target architecture, how data flows through the gateway,
+> what IT/Network/Security must provide, the phased plan, the UAT checklist, the risk register,
+> and the go‑live / rollback process.
+
+---
+
 ## ✨ Features
 
 | Module | Description |
