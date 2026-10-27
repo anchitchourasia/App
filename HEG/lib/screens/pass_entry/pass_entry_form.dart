@@ -112,6 +112,7 @@ class _PassEntryFormState extends State<PassEntryForm> {
   String get _passSaveUrl => ApiConfig.passSave;
   String get _passUpdateUrl => ApiConfig.passUpdate;
   String get _passListUrl => ApiConfig.passList;
+  String get _passListV1Url => ApiConfig.passListV1;
   String get _passStatusUpdateUrl => ApiConfig.passStatusUpdate;
   String get _apiKey => ApiConfig.apiKey;
   String get _passHistoryUrl => ApiConfig.passHistory; // <- ADD THIS LINE
@@ -212,7 +213,10 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _empName = (data['name'] ?? '').toString();
           _empDept = (data['deptName'] ?? '').toString().toUpperCase();
           _empDeptCode = (data['deptCode'] ?? '').toString();
-          _empMobile = (data['mobileNo'] ?? '').toString().trim();
+          // Mobile number in form view page is fetched from our table (CW.VPMS_PASS_REGISTRY)
+          if (!widget.isViewMode && _empMobile.isEmpty) {
+            _empMobile = (data['mobileNo'] ?? '').toString().trim();
+          }
           _empAadhar = (data['aadhaarNo'] ?? data['aadharNo'] ?? '').toString();
           _empContractorCode = (data['contractorCode'] ?? '').toString();
           _empContractorName = (data['contractorName'] ?? '').toString();
@@ -235,12 +239,12 @@ class _PassEntryFormState extends State<PassEntryForm> {
     }
   }
 
-  void _clearEmployeeData() {
+  void _clearEmployeeData({bool clearMobile = true}) {
     setState(() {
       _empName = '';
       _empDept = '';
       _empDeptCode = '';
-      _empMobile = '';
+      if (clearMobile && !widget.isViewMode) _empMobile = '';
       _empAadhar = '';
       _empContractorCode = '';
       _empContractorName = '';
@@ -276,6 +280,27 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _parkingToBeUsed = (data['parkingToBeUsed'] ?? '').toString();
           _status = (data['reqStatus'] ?? 'DRAFT').toString();
           _passNo = data['passNo'] as int?;
+
+          // Fetch mobile number from our table (CW.VPMS_PASS_REGISTRY)
+          String parsedMobile = '';
+          data.forEach((key, value) {
+            if (value != null) {
+              final normalizedKey =
+                  key.toString().toLowerCase().replaceAll('_', '');
+              if (normalizedKey == 'mobileno' ||
+                  normalizedKey == 'mobile' ||
+                  normalizedKey == 'phoneno' ||
+                  normalizedKey == 'phone') {
+                final valStr = value.toString().trim();
+                if (valStr.toLowerCase() != 'null' && valStr.isNotEmpty) {
+                  parsedMobile = valStr;
+                }
+              }
+            }
+          });
+          if (parsedMobile.isNotEmpty) {
+            _empMobile = parsedMobile;
+          }
           // ---------------------------------------------------------
           // NEW FIX: Bulletproof parser with Web-UI Fallbacks
           // ---------------------------------------------------------
@@ -332,6 +357,43 @@ class _PassEntryFormState extends State<PassEntryForm> {
           _isSaving = false;
           _saveSuccess = 'Pass details loaded successfully.';
         });
+
+        // Fallback: If mobile is empty, check passListV1 which calls
+        // getPassRegistryDetails() selecting a.MOBILE_NO from CW.VPMS_PASS_REGISTRY
+        if (_empMobile.isEmpty) {
+          try {
+            final v1Res = await http
+                .get(Uri.parse(_passListV1Url), headers: {'x-api-key': _apiKey})
+                .timeout(const Duration(milliseconds: 5000));
+            if (v1Res.statusCode == 200) {
+              final listData = jsonDecode(v1Res.body);
+              if (listData is List) {
+                for (final item in listData) {
+                  if (item is Map &&
+                      ((item['id'] != null && item['id'] == id) ||
+                          (item['passId'] != null && item['passId'] == id) ||
+                          (item['passNo'] != null &&
+                              item['passNo'].toString() ==
+                                  _passNoCtrl.text.trim()))) {
+                    final m = (item['mobileNo'] ??
+                            item['mobile'] ??
+                            item['mobile_no'] ??
+                            item['MOBILE_NO'] ??
+                            '')
+                        .toString()
+                        .trim();
+                    if (m.isNotEmpty && m.toLowerCase() != 'null') {
+                      setState(() {
+                        _empMobile = m;
+                      });
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
 
         if (_ecNoCtrl.text.isNotEmpty) {
           _loadEmployee();
@@ -623,6 +685,27 @@ class _PassEntryFormState extends State<PassEntryForm> {
         setState(() {
           _registryId ??= data['id'] as int?;
           _passNo = data['passNo'] as int?;
+
+          // Fetch mobile number from our table (CW.VPMS_PASS_REGISTRY)
+          String parsedMobile = '';
+          data.forEach((key, value) {
+            if (value != null) {
+              final normalizedKey =
+                  key.toString().toLowerCase().replaceAll('_', '');
+              if (normalizedKey == 'mobileno' ||
+                  normalizedKey == 'mobile' ||
+                  normalizedKey == 'phoneno' ||
+                  normalizedKey == 'phone') {
+                final valStr = value.toString().trim();
+                if (valStr.toLowerCase() != 'null' && valStr.isNotEmpty) {
+                  parsedMobile = valStr;
+                }
+              }
+            }
+          });
+          if (parsedMobile.isNotEmpty) {
+            _empMobile = parsedMobile;
+          }
           if (_passNo != null) {
             _passNoCtrl.text = _passNo.toString();
           }
