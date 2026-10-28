@@ -1,9 +1,8 @@
-// lib/screens/approver/approver_pending_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../data/pass_registry_api.dart';
 import '../../models/pass_registry_item.dart';
-import '../../widgets/heg_app_bar.dart';
 import '../pass_entry/pass_entry_page.dart';
 
 class ApproverPendingPage extends StatefulWidget {
@@ -13,7 +12,8 @@ class ApproverPendingPage extends StatefulWidget {
   State<ApproverPendingPage> createState() => _ApproverPendingPageState();
 }
 
-class _ApproverPendingPageState extends State<ApproverPendingPage> {
+class _ApproverPendingPageState extends State<ApproverPendingPage>
+    with SingleTickerProviderStateMixin {
   final PassRegistryApi api = PassRegistryApi();
   final TextEditingController searchController = TextEditingController();
 
@@ -34,25 +34,27 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
 
   static const Duration pollInterval = Duration(seconds: 30);
 
-  static const Color bg1 = Color(0xFF0B1E3A);
-  static const Color bg2 = Color(0xFF0EA5A4);
-
-  static const Color panelBg = Colors.white;
-  static const Color panelBorder = Color(0xFFD9E2EC);
-  static const Color textPrimary = Color(0xFF102A43);
-  static const Color textSecondary = Color(0xFF627D98);
-  static const Color accentTeal = Color(0xFF0EA5A4);
-  static const Color accentDark = Color(0xFF0B1E3A);
+  late final AnimationController _animController;
+  late final Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
     loadPasses();
     startPolling();
   }
 
   @override
   void dispose() {
+    _animController.dispose();
     pollTimer?.cancel();
     searchController.dispose();
     super.dispose();
@@ -80,7 +82,6 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
       if (!mounted) return;
       setState(() {
         allPasses = rows;
-        // Filter only SUBMITTED or CONFIRMED passes (pending for approver)
         pendingPasses = rows.where((row) {
           final status = row.status.trim().toUpperCase();
           return status == 'SUBMITTED' || status == 'CONFIRMED';
@@ -88,6 +89,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
         lastUpdated = DateTime.now();
         applyFilters();
       });
+      _animController.forward(from: 0.0);
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
@@ -97,28 +99,22 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
         });
       }
     } finally {
-      if (!mounted) return;
-      if (!silent) {
+      if (mounted && !silent) {
         setState(() => loading = false);
       }
     }
   }
 
   void applyFilters() {
-    // Apply search filter
     pendingPasses = allPasses.where((row) {
-      // first filter by pending status
       final status = row.status.trim().toUpperCase();
       final isPending = status == 'SUBMITTED' || status == 'CONFIRMED';
       if (!isPending) return false;
-
-      // then by search text
       return row.matchesSearch(searchText);
     }).toList();
 
     final totalPagesLocal = (pendingPasses.length / pageSize).ceil();
 
-    // Clamp currentPage into a valid range
     if (totalPagesLocal <= 0) {
       currentPage = 1;
     } else {
@@ -131,7 +127,6 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
     if (pendingPasses.isEmpty) return [];
 
     final totalPagesLocal = (pendingPasses.length / pageSize).ceil();
-    // Safe page between 1 and totalPagesLocal
     final safePage = currentPage < 1
         ? 1
         : (currentPage > totalPagesLocal ? totalPagesLocal : currentPage);
@@ -159,23 +154,12 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
 
   void changePage(int page) {
     if (page < 1 || page > totalPages) return;
+    HapticFeedback.selectionClick();
     setState(() => currentPage = page);
   }
 
-  String formatDateString(String date) {
-    if (date.trim().isEmpty) return '-';
-    try {
-      final dt = DateTime.parse(date);
-      final dd = dt.day.toString().padLeft(2, '0');
-      final mm = dt.month.toString().padLeft(2, '0');
-      final yyyy = dt.year.toString();
-      return '$dd/$mm/$yyyy';
-    } catch (_) {
-      return date;
-    }
-  }
-
   void reviewPass(PassRegistryItem row) async {
+    HapticFeedback.mediumImpact();
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -183,7 +167,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
       builder: (_) => PassEntryPage(
         registryId: row.passId,
         isViewMode: false,
-        isApproverMode: true, // approver review mode
+        isApproverMode: true,
       ),
     );
     await loadPasses(silent: true);
@@ -192,41 +176,108 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: const HegAppBar(title: 'Pending for Approver'),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [bg1, bg2],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      extendBodyBehindAppBar: true,
+      backgroundColor: const Color(0xFF070D1B),
+      appBar: AppBar(
+        title: const Text(
+          'Pending Approvals',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 19,
           ),
         ),
-        child: loading
-            ? const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-            : hasError
-            ? ErrorView(message: errorMessage, onRetry: loadPasses)
-            : RefreshIndicator(
-                color: accentTeal,
-                onRefresh: loadPasses,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                  children: [
-                    _buildSummaryPanel(),
-                    const SizedBox(height: 10),
-                    _buildControlPanel(),
-                    const SizedBox(height: 12),
-                    if (pagedPasses.isEmpty)
-                      const EmptyState()
-                    else
-                      ...pagedPasses.map(_buildPassCard),
-                    const SizedBox(height: 12),
-                    _buildPaginationPanel(),
+        backgroundColor: const Color(0xFF070D1B).withValues(alpha: 0.75),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => loadPasses(),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Background Gradient Base
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF060B14),
+                    Color(0xFF0B172B),
+                    Color(0xFF0F264A),
+                    Color(0xFF1E3A8A),
+                  ],
+                  stops: [0.0, 0.35, 0.7, 1.0],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ),
+
+          // Ambient Amber/Gold Priority Glow
+          Positioned(
+            top: 40,
+            right: -60,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFFBBF24).withValues(alpha: 0.14),
+                    Colors.transparent,
                   ],
                 ),
               ),
+            ),
+          ),
+
+          SafeArea(
+            child: loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFFBBF24),
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : hasError
+                    ? ErrorView(message: errorMessage, onRetry: () => loadPasses())
+                    : RefreshIndicator(
+                        color: const Color(0xFFFBBF24),
+                        backgroundColor: const Color(0xFF0F1E36),
+                        onRefresh: () => loadPasses(),
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: ListView(
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                            children: [
+                              _buildSummaryPanel(),
+                              const SizedBox(height: 14),
+                              _buildControlPanel(),
+                              const SizedBox(height: 16),
+                              if (pagedPasses.isEmpty)
+                                const EmptyState()
+                              else
+                                ...pagedPasses.map(_buildPassCard),
+                              const SizedBox(height: 16),
+                              _buildPaginationPanel(),
+                            ],
+                          ),
+                        ),
+                      ),
+          ),
+        ],
       ),
     );
   }
@@ -238,61 +289,110 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withAlpha(20)),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1E3A8A).withValues(alpha: 0.7),
+            const Color(0xFF0F1E36).withValues(alpha: 0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFFFBBF24).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Pending for Approval',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFBBF24).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Color(0xFFFBBF24),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pending Approver Queue',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Passes awaiting your immediate review & sign-off',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Passes awaiting approver review',
-            style: TextStyle(
-              color: Colors.white.withAlpha(185),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryStat(
+                  'Pending Passes',
+                  pendingPasses.length.toString(),
+                  const Color(0xFFFDE68A),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryStat(
+                  'Current Page',
+                  '$currentPage of $totalPages',
+                  const Color(0xFF93C5FD),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _summaryStat('Total', pendingPasses.length.toString()),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _summaryStat('Page', '$currentPage of $totalPages'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
               Container(
-                width: 8,
-                height: 8,
+                width: 7,
+                height: 7,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF22C55E),
+                  color: Color(0xFF34D399),
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Text(
-                'Last updated $lastUpdatedText',
+                'Auto-refreshed at: $lastUpdatedText',
                 style: TextStyle(
-                  color: Colors.white.withAlpha(190),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -302,29 +402,31 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
     );
   }
 
-  Widget _summaryStat(String label, String value) {
+  Widget _summaryStat(String label, String value, Color accentColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(16),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withAlpha(18)),
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: accentColor.withValues(alpha: 0.25),
+        ),
       ),
       child: Column(
         children: [
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withAlpha(165),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 3),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: accentColor,
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -337,44 +439,69 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   Widget _buildControlPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
-        boxShadow: const [
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0C000000),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       child: TextField(
         controller: searchController,
         onChanged: onSearch,
         style: const TextStyle(
-          color: textPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+          color: Colors.white,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w500,
         ),
+        cursorColor: const Color(0xFFFBBF24),
         decoration: InputDecoration(
           isDense: true,
-          prefixIcon: const Icon(Icons.search, size: 20, color: textSecondary),
-          hintText: 'Search pass id, employee, contractor, vehicle...',
-          hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: Color(0xFF94A3B8),
+          ),
+          suffixIcon: searchText.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.white60),
+                  onPressed: () {
+                    searchController.clear();
+                    onSearch('');
+                  },
+                )
+              : null,
+          hintText: 'Search pending pass #, vehicle, employee...',
+          hintStyle: TextStyle(
+            fontSize: 12.5,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
           filled: true,
-          fillColor: const Color(0xFFF8FAFC),
+          fillColor: Colors.white.withValues(alpha: 0.05),
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 14,
+            horizontal: 14,
+            vertical: 12,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: panelBorder),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: accentTeal, width: 1.2),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: Color(0xFFFBBF24),
+              width: 1.4,
+            ),
           ),
         ),
       ),
@@ -382,122 +509,142 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   }
 
   Widget _buildPassCard(PassRegistryItem row) {
-    final badgeColor = const Color(0xFFD97706); // Warning color for pending
+    const badgeColor = Color(0xFFFBBF24); // amber for pending
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
-        boxShadow: const [
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: badgeColor.withValues(alpha: 0.3),
+          width: 1.2,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0C000000),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: badgeColor.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 5,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: textPrimary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 4,
-                        children: [
-                          _topMeta(
-                            'Pass',
-                            row.passNo.isEmpty ? '-' : row.passNo,
-                          ),
-                          _topMeta(
-                            'Gate',
-                            row.gateNo.isEmpty ? '-' : row.gateNo,
-                          ),
-                          _topMeta(
-                            'Type',
-                            row.vehicleType.isEmpty ? '-' : row.vehicleType,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withAlpha(18),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: badgeColor.withAlpha(40)),
-                  ),
-                  child: Text(
-                    row.status.isEmpty ? 'PENDING' : row.status,
-                    style: TextStyle(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Vehicle Header & Status Chip
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 4.5,
+                    height: 52,
+                    decoration: BoxDecoration(
                       color: badgeColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: [
+                        BoxShadow(
+                          color: badgeColor.withValues(alpha: 0.6),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          row.vehicleNo.isEmpty ? 'NO NUMBER' : row.vehicleNo,
+                          style: const TextStyle(
+                            fontSize: 18.5,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 4,
+                          children: [
+                            _topMeta('Pass #', row.passNo.isEmpty ? '-' : row.passNo),
+                            _topMeta('Gate', row.gateNo.isEmpty ? '-' : row.gateNo),
+                            _topMeta(
+                              'Type',
+                              row.vehicleType.isEmpty ? '-' : row.vehicleType,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: badgeColor.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      row.status.isEmpty ? 'PENDING' : row.status,
+                      style: const TextStyle(
+                        color: badgeColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+              const Divider(color: Color(0x22FFFFFF), height: 1),
+              const SizedBox(height: 12),
+
+              _dataLine('Employee', row.name),
+              _dataLine('EC No', row.employeeNo),
+              _dataLine('Emp Type', row.empType),
+              _dataLine('Department', row.deptName),
+              if (row.contractorName.isNotEmpty)
+                _dataLine('Contractor', row.contractorName),
+
+              const SizedBox(height: 14),
+
+              // Action button to review pass
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => reviewPass(row),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 3,
+                  ),
+                  icon: const Icon(Icons.rate_review_outlined, size: 18),
+                  label: const Text(
+                    'Review & Act on Pass',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1, color: panelBorder),
-            const SizedBox(height: 12),
-            _dataLine('Employee', row.name),
-            _dataLine('EC No', row.employeeNo),
-            _dataLine('Emp Type', row.empType),
-            _dataLine('Department', row.deptName),
-            if (row.contractorName.isNotEmpty)
-              _dataLine('Contractor', row.contractorName),
-            const SizedBox(height: 12),
-            // Action Buttons
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _actionButton(
-                  label: 'Review',
-                  icon: Icons.visibility_outlined,
-                  foreground: accentDark,
-                  background: const Color(0xFFEAF2FF),
-                  onTap: () => reviewPass(row),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -506,17 +653,17 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   Widget _topMeta(String label, String value) {
     return RichText(
       text: TextSpan(
-        style: const TextStyle(
-          fontSize: 12,
-          color: textSecondary,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          fontSize: 11.5,
+          color: Colors.white.withValues(alpha: 0.6),
+          fontWeight: FontWeight.w500,
         ),
         children: [
           TextSpan(text: '$label: '),
           TextSpan(
             text: value,
             style: const TextStyle(
-              color: textPrimary,
+              color: Colors.white,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -527,16 +674,16 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
 
   Widget _dataLine(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 92,
+            width: 100,
             child: Text(
               label,
-              style: const TextStyle(
-                color: textSecondary,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -546,82 +693,13 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
             child: Text(
               value.isEmpty ? '-' : value,
               style: const TextStyle(
-                color: textPrimary,
-                fontSize: 13,
+                color: Colors.white,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _dateBox(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: panelBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionButton({
-    required String label,
-    required IconData icon,
-    required Color foreground,
-    required Color background,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: foreground.withAlpha(28)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: foreground),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: foreground,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -629,95 +707,54 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   Widget _buildPaginationPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
       ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
+      padding: const EdgeInsets.all(14),
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Text(
-                'Rows per page',
-                style: TextStyle(
-                  color: textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+          OutlinedButton.icon(
+            onPressed: currentPage > 1 ? () => changePage(currentPage - 1) : null,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white24,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-              const Spacer(),
-              Wrap(
-                spacing: 6,
-                children: [10, 20, 50].map((size) {
-                  final selected = pageSize == size;
-                  return ChoiceChip(
-                    label: Text(
-                      size.toString(),
-                      style: TextStyle(
-                        color: selected ? Colors.white : textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    selected: selected,
-                    selectedColor: accentTeal,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    side: const BorderSide(color: panelBorder),
-                    onSelected: (_) {
-                      setState(() {
-                        pageSize = size;
-                        currentPage = 1;
-                        applyFilters();
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
+            ),
+            icon: const Icon(Icons.arrow_back_ios_rounded, size: 12),
+            label: const Text('Prev'),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              OutlinedButton(
-                onPressed: currentPage > 1
-                    ? () => changePage(currentPage - 1)
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: panelBorder),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Prev'),
-              ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    'Page $currentPage of $totalPages',
-                    style: const TextStyle(
-                      color: textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+          Expanded(
+            child: Center(
+              child: Text(
+                'Page $currentPage of $totalPages',
+                style: const TextStyle(
+                  color: Color(0xFFFDE68A),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              ElevatedButton(
-                onPressed: currentPage < totalPages
-                    ? () => changePage(currentPage + 1)
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentDark,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Next'),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: currentPage < totalPages ? () => changePage(currentPage + 1) : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.white10,
+              disabledForegroundColor: Colors.white24,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
+            ),
+            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 12),
+            label: const Text('Next'),
           ),
         ],
       ),
@@ -725,7 +762,6 @@ class _ApproverPendingPageState extends State<ApproverPendingPage> {
   }
 }
 
-// ================== ERROR VIEW ==================
 class ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -738,26 +774,28 @@ class ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFD9E2EC)),
+            color: const Color(0xFF0F1E36),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
-                color: Color(0xFFDC2626),
-                size: 40,
+                Icons.error_outline_rounded,
+                color: Color(0xFFF87171),
+                size: 42,
               ),
               const SizedBox(height: 12),
               const Text(
-                'Failed to load pass registry',
+                'Failed to load pending queue',
                 style: TextStyle(
-                  color: Color(0xFF102A43),
-                  fontSize: 18,
+                  color: Colors.white,
+                  fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
                 textAlign: TextAlign.center,
@@ -765,22 +803,27 @@ class ErrorView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 message,
-                style: const TextStyle(
-                  color: Color(0xFF627D98),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 12.5,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: onRetry,
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  onRetry();
+                },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0B1E3A),
+                  backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
-                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                child: const Text('Retry'),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Retry'),
               ),
             ],
           ),
@@ -790,39 +833,43 @@ class ErrorView extends StatelessWidget {
   }
 }
 
-// ================== EMPTY STATE ==================
 class EmptyState extends StatelessWidget {
   const EmptyState({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD9E2EC)),
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
-          SizedBox(height: 10),
-          Text(
-            'No pending passes',
+          const Icon(
+            Icons.task_alt_rounded,
+            size: 44,
+            color: Color(0xFF34D399),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'All Caught Up!',
             style: TextStyle(
-              fontSize: 17,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF102A43),
+              color: Colors.white,
             ),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
-            'All passes have been reviewed.',
+            'No pending passes awaiting approver review at this moment.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF627D98),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.65),
+              fontSize: 12.5,
             ),
           ),
         ],

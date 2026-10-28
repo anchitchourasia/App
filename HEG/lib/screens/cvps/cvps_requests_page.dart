@@ -1,17 +1,14 @@
 /// CVPS Vehicle Permission list screen.
-/// Mirrors vehicle-permission-list.ts and uses same Pass Registry UI style.
+/// Modernized with executive dark theme, glassmorphic cards, and smooth micro-interactions.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../widgets/heg_app_bar.dart';
 import '../../data/cvps_api.dart';
 import '../../data/gate_log_api.dart';
 import '../../data/session_store.dart';
 import '../../models/cvps_request_item.dart';
-// The list page no longer needs cvps_document, cvps_driver, cvps_history_entry,
-// or cvps_pass_pdf_service, because PDF is generated from CvpsPassPage.
-// Remove unused imports if they still exist.
 
 class CvpsRequestsPage extends StatefulWidget {
   const CvpsRequestsPage({super.key});
@@ -20,17 +17,12 @@ class CvpsRequestsPage extends StatefulWidget {
   State<CvpsRequestsPage> createState() => _CvpsRequestsPageState();
 }
 
-class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
-  // API client to call CVPS backend.
+class _CvpsRequestsPageState extends State<CvpsRequestsPage>
+    with SingleTickerProviderStateMixin {
   final CvpsApi api = CvpsApi();
-
-  // Search text controller.
   final TextEditingController searchController = TextEditingController();
 
-  // All rows from API.
   List<CvpsRequestItem> allRows = [];
-
-  // Filtered rows after search/status filter.
   List<CvpsRequestItem> filteredRows = [];
 
   bool loading = true;
@@ -40,22 +32,12 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   final Set<int> _gateActionLoading = <int>{};
   final Map<int, String> _lastGateActionByRequest = <int, String>{};
 
-  // Filter state: search string and status.
   String searchText = '';
   String statusFilter = 'ALL';
 
-  // Same gradient colors and panel style as Pass Registry.
-  static const Color bg1 = Color(0xFF0B1E3A);
-  static const Color bg2 = Color(0xFF0EA5A4);
+  late final AnimationController _animController;
+  late final Animation<double> _fadeAnimation;
 
-  static const Color panelBg = Colors.white;
-  static const Color panelBorder = Color(0xFFD9E2EC);
-  static const Color textPrimary = Color(0xFF102A43);
-  static const Color textSecondary = Color(0xFF627D98);
-  static const Color accentTeal = Color(0xFF0EA5A4);
-  static const Color accentDark = Color(0xFF0B1E3A);
-
-  // Status filter options (same as web statusOptions).
   final List<String> statusOptions = const [
     'ALL',
     'SAVED',
@@ -71,16 +53,24 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   @override
   void initState() {
     super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
     _loadRows();
   }
 
   @override
   void dispose() {
+    _animController.dispose();
     searchController.dispose();
     super.dispose();
   }
 
-  /// Loads all CVPS requests from backend and applies filters.
   Future<void> _loadRows() async {
     setState(() {
       loading = true;
@@ -99,8 +89,10 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
         loading = false;
       });
 
+      _animController.forward(from: 0.0);
       await _loadGateActionsForApprovedRows(rows);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         hasError = true;
         errorMessage = e.toString();
@@ -133,15 +125,12 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
         if (!mounted) return;
 
         setState(() {
-          // Unknown backend state: do not assume IN is safe.
-          // Use a special state so neither IN nor OUT is displayed.
           _lastGateActionByRequest[row.requestNo] = 'UNKNOWN';
         });
       }
     }
   }
 
-  /// Applies search + status filters to allRows to produce filteredRows.
   void _applyFilters() {
     final search = searchText.trim().toLowerCase();
     final statusUpper = statusFilter.trim().toUpperCase();
@@ -149,11 +138,8 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     filteredRows = allRows.where((row) {
       final rowStatus = row.reqStatus.trim().toUpperCase();
 
-      // Status match: ALL or exact status.
       final matchesStatus = statusUpper == 'ALL' || rowStatus == statusUpper;
 
-      // Search match: requestNo, contractorCode, vehicleNo, vehicleType,
-      // natureOfJob, createdBy.
       final matchesSearch =
           search.isEmpty ||
           row.requestNo.toString().contains(search) ||
@@ -167,7 +153,6 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     }).toList();
   }
 
-  /// Called when search text changes.
   void _onSearchChange(String value) {
     setState(() {
       searchText = value;
@@ -175,16 +160,15 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     });
   }
 
-  /// Called when status dropdown changes.
   void _onStatusChange(String? value) {
     if (value == null) return;
+    HapticFeedback.selectionClick();
     setState(() {
       statusFilter = value;
       _applyFilters();
     });
   }
 
-  /// Returns human-readable label for a status.
   String _getStatusLabel(String status) {
     final normalized = status.trim().toUpperCase();
     switch (normalized) {
@@ -202,51 +186,48 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
       case 'HOLD':
         return 'Hold';
       case 'MODIFY':
-        return 'MODIFY';
+        return 'Modify';
       default:
         return status.isEmpty ? '-' : status;
     }
   }
 
-  /// Returns a color for status badge.
   Color _getStatusColor(String status) {
     final normalized = status.trim().toUpperCase();
     switch (normalized) {
       case 'SUBMITTED':
       case 'CREATED':
-        return const Color(0xFF2563EB); // blue
+        return const Color(0xFF38BDF8); // sky
       case 'CONFIRMED':
-        return const Color(0xFF0891B2); // teal
+        return const Color(0xFF06B6D4); // cyan
       case 'APPROVED':
-        return const Color(0xFF16A34A); // green
+        return const Color(0xFF34D399); // emerald
       case 'REJECTED':
-        return const Color(0xFFDC2626); // red
+        return const Color(0xFFF87171); // red
       case 'HOLD':
       case 'MODIFY':
-        return const Color(0xFFF59E0B); // amber
+        return const Color(0xFFFBBF24); // amber
       case 'SAVED':
-        return const Color(0xFF6B7280); // gray
+        return const Color(0xFF94A3B8); // slate
       default:
-        return const Color(0xFF6B7280);
+        return const Color(0xFF94A3B8);
     }
   }
 
-  /// When user taps View button on a row.
-  /// Opens full CVPS form screen in view mode.
   void _viewRequest(CvpsRequestItem row) {
+    HapticFeedback.lightImpact();
     Navigator.pushNamed(
       context,
-      '/cvpsForm', // define this route in main.dart
+      '/cvpsForm',
       arguments: row.requestNo,
     );
   }
 
-  /// Navigate to Pass UI screen for this request.
-  /// From that screen user can view pass and click Download/Print.
   void _viewPass(CvpsRequestItem row) {
+    HapticFeedback.lightImpact();
     Navigator.pushNamed(
       context,
-      '/cvpsPass', // define this route in main.dart
+      '/cvpsPass',
       arguments: row.requestNo,
     );
   }
@@ -302,8 +283,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
               ? const Color(0xFF15803D)
               : const Color(0xFFB91C1C),
           content: Text(
-            'Gate $normalizedAction saved to  database for '
-            'Permission No. ${row.requestNo}.',
+            'Gate $normalizedAction recorded for Permission No. ${row.requestNo}.',
           ),
         ),
       );
@@ -314,7 +294,7 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: const Color(0xFFB91C1C),
-          content: Text('Could not save Gate $normalizedAction: $error'),
+          content: Text('Could not record Gate $normalizedAction: $error'),
         ),
       );
     } finally {
@@ -329,79 +309,198 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: const HegAppBar(title: 'Permission Requests'),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [bg1, bg2],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      extendBodyBehindAppBar: true,
+      backgroundColor: const Color(0xFF070D1B),
+      appBar: AppBar(
+        title: const Text(
+          'Permission Requests',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 19,
           ),
         ),
-        child: loading
-            ? const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-            : hasError
-            ? ErrorView(message: errorMessage, onRetry: _loadRows)
-            : RefreshIndicator(
-                color: accentTeal,
-                onRefresh: _loadRows,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                  children: [
-                    _buildSummaryPanel(),
-                    const SizedBox(height: 10),
-                    _buildControlPanel(),
-                    const SizedBox(height: 12),
-                    if (filteredRows.isEmpty)
-                      const EmptyState()
-                    else
-                      ...filteredRows.map(_buildRequestCard),
+        backgroundColor: const Color(0xFF070D1B).withValues(alpha: 0.75),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadRows,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Background Gradient Base
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF060B14),
+                    Color(0xFF0B172B),
+                    Color(0xFF0F264A),
+                    Color(0xFF1E3A8A),
+                  ],
+                  stops: [0.0, 0.35, 0.7, 1.0],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ),
+
+          // Ambient Glow
+          Positioned(
+            top: 40,
+            right: -60,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF34D399).withValues(alpha: 0.12),
+                    Colors.transparent,
                   ],
                 ),
               ),
+            ),
+          ),
+
+          SafeArea(
+            child: loading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF60A5FA),
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : hasError
+                    ? ErrorView(message: errorMessage, onRetry: _loadRows)
+                    : RefreshIndicator(
+                        color: const Color(0xFF38BDF8),
+                        backgroundColor: const Color(0xFF0F1E36),
+                        onRefresh: _loadRows,
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: ListView(
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                            children: [
+                              _buildSummaryPanel(),
+                              const SizedBox(height: 14),
+                              _buildControlPanel(),
+                              const SizedBox(height: 16),
+                              if (filteredRows.isEmpty)
+                                const EmptyState()
+                              else
+                                ...filteredRows.map(_buildRequestCard),
+                            ],
+                          ),
+                        ),
+                      ),
+          ),
+        ],
       ),
     );
   }
 
-  /// Summary at top: shows total & filtered counts.
   Widget _buildSummaryPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withAlpha(20)),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1E3A8A).withValues(alpha: 0.7),
+            const Color(0xFF0F1E36).withValues(alpha: 0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E3A8A).withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Vehicle Permission Requests',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Contractor vehicle permissions with search and filters',
-            style: TextStyle(
-              color: Colors.white.withAlpha(185),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _summaryStat('Total', allRows.length.toString())),
-              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34D399).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.receipt_long_rounded,
+                  color: Color(0xFF34D399),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Vehicle Permission System',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Contractor permission records & gate movements',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
               Expanded(
-                child: _summaryStat('Filtered', filteredRows.length.toString()),
+                child: _summaryStat(
+                  label: 'Total Requests',
+                  value: allRows.length.toString(),
+                  icon: Icons.folder_open_rounded,
+                  accentColor: const Color(0xFF93C5FD),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _summaryStat(
+                  label: 'Filtered Result',
+                  value: filteredRows.length.toString(),
+                  icon: Icons.filter_alt_outlined,
+                  accentColor: const Color(0xFFA7F3D0),
+                ),
               ),
             ],
           ),
@@ -410,115 +509,163 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     );
   }
 
-  Widget _summaryStat(String label, String value) {
+  Widget _summaryStat({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color accentColor,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(16),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withAlpha(18)),
+        color: Colors.black.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accentColor.withValues(alpha: 0.25),
+        ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withAlpha(165),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
+          Icon(icon, size: 20, color: accentColor),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Search + status filter panel, same style as Pass Registry.
   Widget _buildControlPanel() {
     return Container(
       decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
-        boxShadow: const [
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0C000000),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       child: Column(
         children: [
+          // Search Field
           TextField(
             controller: searchController,
             onChanged: _onSearchChange,
             style: const TextStyle(
-              color: textPrimary,
-              fontSize: 14,
+              color: Colors.white,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+            ),
+            cursorColor: const Color(0xFF60A5FA),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: Color(0xFF94A3B8),
+              ),
+              suffixIcon: searchText.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.white60),
+                      onPressed: () {
+                        searchController.clear();
+                        _onSearchChange('');
+                      },
+                    )
+                  : null,
+              hintText: 'Search request #, contractor, vehicle, nature...',
+              hintStyle: TextStyle(
+                fontSize: 12.5,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF60A5FA),
+                  width: 1.4,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Status Filter Dropdown
+          DropdownButtonFormField<String>(
+            initialValue: statusOptions.contains(statusFilter) ? statusFilter : 'ALL',
+            isExpanded: true,
+            dropdownColor: const Color(0xFF0F1E36),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13.5,
               fontWeight: FontWeight.w600,
             ),
             decoration: InputDecoration(
               isDense: true,
-              prefixIcon: const Icon(
-                Icons.search,
-                size: 20,
-                color: textSecondary,
-              ),
-              hintText: 'Search request no, contractor, vehicle, status...',
-              hintStyle: const TextStyle(fontSize: 13, color: textSecondary),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 14,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: panelBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: accentTeal, width: 1.2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: statusOptions.contains(statusFilter)
-                ? statusFilter
-                : 'ALL',
-            isExpanded: true,
-            decoration: InputDecoration(
-              labelText: 'Status',
-              labelStyle: const TextStyle(
-                color: textSecondary,
+              labelText: 'Filter by Status',
+              labelStyle: TextStyle(
+                color: const Color(0xFF60A5FA).withValues(alpha: 0.9),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
               filled: true,
-              fillColor: const Color(0xFFF8FAFC),
+              fillColor: Colors.white.withValues(alpha: 0.05),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
+                horizontal: 14,
+                vertical: 11,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: panelBorder),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: accentTeal, width: 1.2),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF60A5FA),
+                  width: 1.4,
+                ),
               ),
             ),
             items: statusOptions
@@ -536,13 +683,9 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     );
   }
 
-  /// Builds a single CVPS request card.
-  /// Includes a View button and a View Pass button (when Approved).
   Widget _buildRequestCard(CvpsRequestItem row) {
     final badgeColor = _getStatusColor(row.reqStatus);
-
     final isApproved = row.reqStatus.trim().toUpperCase() == 'APPROVED';
-
     final isGateActionLoading = _gateActionLoading.contains(row.requestNo);
 
     final lastGateAction = _lastGateActionByRequest[row.requestNo];
@@ -551,174 +694,202 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     final gateStateUnavailable = lastGateAction == 'UNKNOWN';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: panelBorder),
-        boxShadow: const [
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0C000000),
-            blurRadius: 10,
-            offset: Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 5,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        row.vehicleNo.isEmpty ? '-' : row.vehicleNo,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: textPrimary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 4,
-                        children: [
-                          _topMeta('Req No', row.requestNo.toString()),
-                          _topMeta(
-                            'Contractor',
-                            row.contractorCode.isEmpty
-                                ? '-'
-                                : row.contractorCode,
-                          ),
-                          _topMeta(
-                            'Type',
-                            row.vehicleType.isEmpty ? '-' : row.vehicleType,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withAlpha(18),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: badgeColor.withAlpha(40)),
-                  ),
-                  child: Text(
-                    _getStatusLabel(row.reqStatus),
-                    style: TextStyle(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Vehicle Header & Status Chip
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 4.5,
+                    height: 52,
+                    decoration: BoxDecoration(
                       color: badgeColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: [
+                        BoxShadow(
+                          color: badgeColor.withValues(alpha: 0.6),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1, color: panelBorder),
-            const SizedBox(height: 12),
-            _dataLine('Nature of Job', row.natureOfJob),
-            _dataLine('Permission To', row.permissionTo),
-            _dataLine('Created By', row.createdBy),
-            _dataLine('Created Date', row.createdDate),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _statBox('Personnel', row.personnelCount.toString()),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _statBox(
-                    'Documents',
-                    row.vehicleDocumentCount.toString(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          row.vehicleNo.isEmpty ? 'NO NUMBER' : row.vehicleNo,
+                          style: const TextStyle(
+                            fontSize: 18.5,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 4,
+                          children: [
+                            _topMeta('Req #', row.requestNo.toString()),
+                            _topMeta(
+                              'Contractor',
+                              row.contractorCode.isEmpty ? '-' : row.contractorCode,
+                            ),
+                            _topMeta(
+                              'Type',
+                              row.vehicleType.isEmpty ? '-' : row.vehicleType,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: badgeColor.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      _getStatusLabel(row.reqStatus),
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
 
-            // View always appears.
-            // View Pass, IN, and OUT appear only for APPROVED requests.
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _actionButton(
-                  label: 'View',
-                  icon: Icons.visibility_outlined,
-                  foreground: accentDark,
-                  background: const Color(0xFFEAF2FF),
-                  onTap: () => _viewRequest(row),
-                ),
-                if (isApproved)
-                  _actionButton(
-                    label: 'View Pass',
-                    icon: Icons.picture_as_pdf_outlined,
-                    foreground: const Color(0xFF16A34A),
-                    background: const Color(0xFFEFFDF5),
-                    onTap: () => _viewPass(row),
-                  ),
-                if (isApproved && !gateStateUnavailable && showInButton)
-                  _actionButton(
-                    label: isGateActionLoading ? 'Please wait...' : 'IN',
-                    icon: isGateActionLoading
-                        ? Icons.hourglass_top
-                        : Icons.login,
-                    foreground: const Color(0xFF15803D),
-                    background: const Color(0xFFDCFCE7),
-                    onTap: isGateActionLoading
-                        ? () {}
-                        : () => _recordGateAction(row, 'IN'),
-                  ),
+              const SizedBox(height: 14),
+              const Divider(color: Color(0x22FFFFFF), height: 1),
+              const SizedBox(height: 12),
 
-                if (isApproved && !gateStateUnavailable && showOutButton)
-                  _actionButton(
-                    label: isGateActionLoading ? 'Please wait...' : 'OUT',
-                    icon: isGateActionLoading
-                        ? Icons.hourglass_top
-                        : Icons.logout,
-                    foreground: const Color(0xFFB91C1C),
-                    background: const Color(0xFFFEE2E2),
-                    onTap: isGateActionLoading
-                        ? () {}
-                        : () => _recordGateAction(row, 'OUT'),
+              _dataLine('Nature of Job', row.natureOfJob),
+              _dataLine('Permission To', row.permissionTo),
+              _dataLine('Created By', row.createdBy),
+              _dataLine('Created Date', row.createdDate),
+
+              const SizedBox(height: 12),
+
+              // Personnel & Document Counter Box
+              Row(
+                children: [
+                  Expanded(
+                    child: _statBox(
+                      'Personnel',
+                      row.personnelCount.toString(),
+                      Icons.people_outline_rounded,
+                      const Color(0xFF38BDF8),
+                    ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _statBox(
+                      'Documents',
+                      row.vehicleDocumentCount.toString(),
+                      Icons.description_outlined,
+                      const Color(0xFFA78BFA),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+
+              // Action Buttons
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _actionButton(
+                    label: 'View',
+                    icon: Icons.visibility_outlined,
+                    foreground: const Color(0xFF93C5FD),
+                    background: const Color(0xFF2563EB).withValues(alpha: 0.2),
+                    borderColor: const Color(0xFF60A5FA).withValues(alpha: 0.4),
+                    onTap: () => _viewRequest(row),
+                  ),
+                  if (isApproved)
+                    _actionButton(
+                      label: 'View Pass',
+                      icon: Icons.picture_as_pdf_outlined,
+                      foreground: const Color(0xFFA7F3D0),
+                      background: const Color(0xFF10B981).withValues(alpha: 0.2),
+                      borderColor: const Color(0xFF34D399).withValues(alpha: 0.4),
+                      onTap: () => _viewPass(row),
+                    ),
+                  if (isApproved && !gateStateUnavailable && showInButton)
+                    _actionButton(
+                      label: isGateActionLoading ? 'Saving...' : 'Gate IN',
+                      icon: isGateActionLoading
+                          ? Icons.hourglass_top_rounded
+                          : Icons.login_rounded,
+                      foreground: const Color(0xFF86EFAC),
+                      background: const Color(0xFF15803D).withValues(alpha: 0.25),
+                      borderColor: const Color(0xFF22C55E).withValues(alpha: 0.5),
+                      onTap: isGateActionLoading
+                          ? () {}
+                          : () => _recordGateAction(row, 'IN'),
+                    ),
+                  if (isApproved && !gateStateUnavailable && showOutButton)
+                    _actionButton(
+                      label: isGateActionLoading ? 'Saving...' : 'Gate OUT',
+                      icon: isGateActionLoading
+                          ? Icons.hourglass_top_rounded
+                          : Icons.logout_rounded,
+                      foreground: const Color(0xFFFCA5A5),
+                      background: const Color(0xFFB91C1C).withValues(alpha: 0.25),
+                      borderColor: const Color(0xFFEF4444).withValues(alpha: 0.5),
+                      onTap: isGateActionLoading
+                          ? () {}
+                          : () => _recordGateAction(row, 'OUT'),
+                    ),
+                ],
+              ),
+
+              if (isApproved && gateStateUnavailable) ...[
+                const SizedBox(height: 10),
+                _gateStateUnavailableStatus(),
+              ] else if (isApproved && lastGateAction != null) ...[
+                const SizedBox(height: 10),
+                _localGateActionStatus(lastGateAction),
               ],
-            ),
-
-            if (isApproved && gateStateUnavailable) ...[
-              const SizedBox(height: 10),
-              _gateStateUnavailableStatus(),
-            ] else if (isApproved && lastGateAction != null) ...[
-              const SizedBox(height: 10),
-              _localGateActionStatus(lastGateAction),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -727,23 +898,25 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   Widget _gateStateUnavailableStatus() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFDBA74)),
+        color: const Color(0xFFF97316).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFFFB923C).withValues(alpha: 0.4),
+        ),
       ),
       child: const Row(
         children: [
-          Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFC2410C)),
-          SizedBox(width: 7),
+          Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFFDBA74)),
+          SizedBox(width: 8),
           Expanded(
             child: Text(
               'Gate status could not be verified. Pull down to refresh.',
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFFC2410C),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFFED7AA),
               ),
             ),
           ),
@@ -754,27 +927,32 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
 
   Widget _localGateActionStatus(String action) {
     final isIn = action == 'IN';
-
-    final foreground = isIn ? const Color(0xFF15803D) : const Color(0xFFB91C1C);
-
-    final background = isIn ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2);
-
-    final border = isIn ? const Color(0xFF86EFAC) : const Color(0xFFFCA5A5);
+    final foreground = isIn ? const Color(0xFFA7F3D0) : const Color(0xFFFCA5A5);
+    final background = isIn
+        ? const Color(0xFF065F46).withValues(alpha: 0.3)
+        : const Color(0xFF991B1B).withValues(alpha: 0.3);
+    final border = isIn
+        ? const Color(0xFF34D399).withValues(alpha: 0.5)
+        : const Color(0xFFEF4444).withValues(alpha: 0.5);
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: border),
       ),
       child: Row(
         children: [
-          Icon(isIn ? Icons.login : Icons.logout, size: 16, color: foreground),
-          const SizedBox(width: 7),
+          Icon(
+            isIn ? Icons.login_rounded : Icons.logout_rounded,
+            size: 16,
+            color: foreground,
+          ),
+          const SizedBox(width: 8),
           Text(
-            'Gate Action: $action',
+            'Current Gate Status: $action',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -782,12 +960,12 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
             ),
           ),
           const Spacer(),
-          const Text(
-            'Saved',
+          Text(
+            'Saved to Registry',
             style: TextStyle(
-              fontSize: 10,
-              color: textSecondary,
-              fontWeight: FontWeight.w600,
+              fontSize: 10.5,
+              color: Colors.white.withValues(alpha: 0.55),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -798,17 +976,17 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
   Widget _topMeta(String label, String value) {
     return RichText(
       text: TextSpan(
-        style: const TextStyle(
-          fontSize: 12,
-          color: textSecondary,
-          fontWeight: FontWeight.w600,
+        style: TextStyle(
+          fontSize: 11.5,
+          color: Colors.white.withValues(alpha: 0.6),
+          fontWeight: FontWeight.w500,
         ),
         children: [
           TextSpan(text: '$label: '),
           TextSpan(
             text: value,
             style: const TextStyle(
-              color: textPrimary,
+              color: Colors.white,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -819,16 +997,16 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
 
   Widget _dataLine(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 110,
             child: Text(
               label,
-              style: const TextStyle(
-                color: textSecondary,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -838,8 +1016,8 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
             child: Text(
               value.isEmpty ? '-' : value,
               style: const TextStyle(
-                color: textPrimary,
-                fontSize: 13,
+                color: Colors.white,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -849,33 +1027,46 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     );
   }
 
-  Widget _statBox(String label, String value) {
+  Widget _statBox(
+    String label,
+    String value,
+    IconData icon,
+    Color accentColor,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: Colors.black.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: panelBorder),
+        border: Border.all(
+          color: accentColor.withValues(alpha: 0.25),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
+          Icon(icon, size: 18, color: accentColor),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -887,39 +1078,45 @@ class _CvpsRequestsPageState extends State<CvpsRequestsPage> {
     required IconData icon,
     required Color foreground,
     required Color background,
+    required Color borderColor,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: foreground.withAlpha(28)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: foreground),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: foreground,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: foreground),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Simple error view (reuse style from Pass Registry).
 class ErrorView extends StatelessWidget {
   final String message;
   final Future<void> Function() onRetry;
@@ -932,26 +1129,28 @@ class ErrorView extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFD9E2EC)),
+            color: const Color(0xFF0F1E36),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
-                color: Color(0xFFDC2626),
-                size: 40,
+                Icons.error_outline_rounded,
+                color: Color(0xFFF87171),
+                size: 42,
               ),
               const SizedBox(height: 12),
               const Text(
                 'Failed to load CVPS requests',
                 style: TextStyle(
-                  color: Color(0xFF102A43),
-                  fontSize: 18,
+                  color: Colors.white,
+                  fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
                 textAlign: TextAlign.center,
@@ -959,22 +1158,27 @@ class ErrorView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 message,
-                style: const TextStyle(
-                  color: Color(0xFF627D98),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 12.5,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => onRetry(),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  onRetry();
+                },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0B1E3A),
+                  backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
-                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                child: const Text('Retry'),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Try Again'),
               ),
             ],
           ),
@@ -990,32 +1194,37 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD9E2EC)),
+        color: const Color(0xFF0F1E36).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+        ),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.inventory_2_outlined, size: 42, color: Color(0xFF9FB3C8)),
-          SizedBox(height: 10),
-          Text(
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 44,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 12),
+          const Text(
             'No permission requests found',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF102A43),
+              color: Colors.white,
             ),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
-            'Try changing search text or filter values.',
+            'Try altering your search keywords or changing the status filter.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF627D98),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 12.5,
             ),
           ),
         ],

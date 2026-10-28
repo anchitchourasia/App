@@ -229,7 +229,7 @@ class _ChatBubbleButtonState extends State<ChatBubbleButton>
       children: [
         FloatingActionButton(
           onPressed: _openChat,
-          backgroundColor: const Color(0xFFB8962E),
+          backgroundColor: const Color(0xFF2563EB),
           tooltip: widget.isAdmin ? 'Admin Inbox' : 'Chat with Admin',
           elevation: 6,
           child: Icon(
@@ -246,7 +246,7 @@ class _ChatBubbleButtonState extends State<ChatBubbleButton>
             top: -6,
             child: AnimatedBuilder(
               animation: _pulseAnim,
-              builder: (_, __) => Transform.scale(
+              builder: (context, child) => Transform.scale(
                 scale: _pulseAnim.value,
                 child: Container(
                   padding: const EdgeInsets.all(5),
@@ -256,7 +256,7 @@ class _ChatBubbleButtonState extends State<ChatBubbleButton>
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.red.withOpacity(0.6),
+                        color: Colors.red.withValues(alpha: 0.6),
                         blurRadius: 8,
                         spreadRadius: 2,
                       ),
