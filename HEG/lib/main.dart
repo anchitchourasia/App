@@ -45,6 +45,12 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      // Fix 3: Align global scaffoldBackgroundColor with the app's light canvas
+      // to eliminate bright white flash during route transitions.
+      theme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFFF0F4F9),
+        canvasColor: const Color(0xFFF0F4F9),
+      ),
       initialRoute: startRoute, // ✅ dynamic initial route
       routes: <String, WidgetBuilder>{
         '/login': (_) => const LoginPage(),

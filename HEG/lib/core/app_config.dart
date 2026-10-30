@@ -1,10 +1,11 @@
 class AppConfig {
-  // static const String apiBaseUrl = 'http://127.0.0.1:9092/vpms';
-  static const String apiBaseUrl = 'http://192.168.9.130:9092/vpms';
-  // static const String cvpsBaseUrl = 'http://127.0.0.1:9092/cvps';
-  static const String cvpsBaseUrl = 'http://192.168.9.130:9092/cvps';
+  static const String apiBaseUrl = 'http://127.0.0.1:9092/vpms';
+  //static const String apiBaseUrl = 'http://192.168.9.130:9092/vpms';
+  static const String cvpsBaseUrl = 'http://127.0.0.1:9092/cvps';
+  //static const String cvpsBaseUrl = 'http://192.168.9.130:9092/cvps';
 
-  static const String dummyGateLogBaseUrl = 'http://10.0.2.2:8080/cvps';
+  // Replace 10.0.2.2 with 127.0.0.1 for USB physical device: static const String dummyGateLogBaseUrl = 'http://10.0.2.2:8080/cvps';
+  static const String dummyGateLogBaseUrl = 'http://127.0.0.1:8080/cvps';
   static const String dummyGateLogApiKey = 'HEG_12345_SECRET';
 
   static const String apiKey = 'VPMS_SECRET_KEY_2026';

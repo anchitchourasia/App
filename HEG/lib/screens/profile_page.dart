@@ -12,7 +12,10 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // Fix 2: Keep tab state alive to prevent disposing and rebuilding on tab switch
+  @override
+  bool get wantKeepAlive => true;
   static const List<String> _dummyAvatars = [
     'assets/images/avatar_1.jpg',
     'assets/images/avatar_2.jpg',
@@ -160,6 +163,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     final user = SessionStore.currentUser;
 
     return Scaffold(

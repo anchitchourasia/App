@@ -4,6 +4,10 @@ import 'package:flutter/services.dart';
 
 import '../data/session_store.dart';
 import '../widgets/chat_bubble_button.dart';
+import 'profile_page.dart';
+import 'vehicle_tracking_page.dart';
+import 'approver/approver_menu_page.dart';
+import 'cvps/cvps_requests_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -42,6 +46,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   Timer? _notifTimer;
+
+  int _currentIndex = 0;
+  late final List<Widget> _pages;
 
   late final AnimationController _entranceController;
   late final AnimationController _ambientController;
@@ -97,6 +104,17 @@ class _HomePageState extends State<HomePage>
 
     _entranceController.forward();
 
+    // Fix 1: Initialize tab pages for IndexedStack to keep states active in memory
+    final role = SessionStore.currentUser?.role;
+    _pages = [
+      _buildDashboardView(),
+      role == 'APPROVER'
+          ? const ApproverVehicleMenuPage()
+          : const VehicleTrackingPage(),
+      const CvpsRequestsPage(),
+      const ProfilePage(),
+    ];
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _startPolling();
     });
@@ -147,6 +165,301 @@ class _HomePageState extends State<HomePage>
     return 'Good Evening';
   }
 
+  void _navigateToModule(String route) {
+    if (route == '/vehicleTracking') {
+      setState(() => _currentIndex = 1);
+    } else if (route == '/cvpsRequests') {
+      setState(() => _currentIndex = 2);
+    } else if (route == '/profile') {
+      setState(() => _currentIndex = 3);
+    } else {
+      Navigator.pushNamed(context, route);
+    }
+  }
+
+  Widget _buildDashboardView() {
+    return Builder(
+      builder: (context) {
+        final String currentUserId = SessionStore.employeeId ?? 'emp_001';
+        final String currentUserName = SessionStore.employeeName ?? 'Employee';
+        final user = SessionStore.currentUser;
+        final size = MediaQuery.of(context).size;
+        final isTablet = size.width > 600;
+
+        return Stack(
+          children: [
+            // Base gradient
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF060B14),
+                      Color(0xFF0B172B),
+                      Color(0xFF0F264A),
+                      Color(0xFF1E3A8A),
+                    ],
+                    stops: [0.0, 0.3, 0.7, 1.0],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+              ),
+            ),
+
+            // Ambient floating orbs
+            AnimatedBuilder(
+              animation: _ambientFloat,
+              builder: (context, child) {
+                return Stack(
+                  children: [
+                    Positioned(
+                      top: 40 + _ambientFloat.value,
+                      right: -60,
+                      child: _GlowOrb(
+                        size: 260,
+                        color: const Color(0xFF06B6D4).withValues(alpha: 0.16),
+                        blurRadius: 100,
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 80 - _ambientFloat.value,
+                      left: -70,
+                      child: _GlowOrb(
+                        size: 280,
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
+                        blurRadius: 110,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            // Tech grid overlay
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _TechPatternPainter(
+                  color: Colors.white.withValues(alpha: 0.02),
+                ),
+              ),
+            ),
+
+            // Main Scrollable Content
+            SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 32 : 18,
+                    vertical: 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Welcome & Profile Hero Card
+                      SlideTransition(
+                        position: _headerSlide,
+                        child: _HeroGreetingCard(
+                          greeting: _getGreeting(),
+                          user: user,
+                          employeeName: currentUserName,
+                          employeeId: currentUserId,
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Section Heading
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Quick Modules',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Choose an enterprise service to proceed',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.65),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.12),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF34D399),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${HomePage._items.length} Active',
+                                  style: const TextStyle(
+                                    color: Color(0xFF93C5FD),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Grid of Menu Cards with Entrance Motion
+                      SlideTransition(
+                        position: _gridSlide,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return isTablet
+                                ? Row(
+                                    children: HomePage._items.map((item) {
+                                      final bool isEnabled =
+                                          item.route == '/profile' ||
+                                          item.route == '/vehicleTracking' ||
+                                          item.route == '/cvpsRequests';
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                          ),
+                                          child: _ModernMenuCard(
+                                            item: item,
+                                            isEnabled: isEnabled,
+                                            onTap: isEnabled
+                                                ? () => _navigateToModule(item.route)
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  )
+                                : Column(
+                                    children: HomePage._items.map((item) {
+                                      final bool isEnabled =
+                                          item.route == '/profile' ||
+                                          item.route == '/vehicleTracking' ||
+                                          item.route == '/cvpsRequests';
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 14),
+                                        child: _ModernMenuCard(
+                                          item: item,
+                                          isEnabled: isEnabled,
+                                          onTap: isEnabled
+                                              ? () => _navigateToModule(item.route)
+                                              : null,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Enterprise System Status Banner
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F1E36).withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF34D399).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.security_rounded,
+                                color: Color(0xFF34D399),
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Connected to HEG Enterprise Network',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Sessions secured with role-based access control',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.6),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 60), // Space for Chat FAB
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final String currentUserId = SessionStore.employeeId ?? 'emp_001';
@@ -155,377 +468,166 @@ class _HomePageState extends State<HomePage>
     final bool isAdmin = SessionStore.isChatAdmin;
     final String receiverId = SessionStore.chatReceiverId;
 
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width > 600;
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+        }
+      },
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        backgroundColor: const Color(0xFF070D1B),
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      backgroundColor: const Color(0xFF070D1B),
-
-      // Custom Modern Glass AppBar
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: const Color(0xFF1E3A8A).withValues(alpha: 0.6),
-                border: Border.all(
-                  color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  'assets/images/image3.jpg',
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.business_rounded,
-                    color: Color(0xFF60A5FA),
-                    size: 18,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text(
-              'HEG HRMS',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 19,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF070D1B).withValues(alpha: 0.75),
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            tooltip: 'Profile',
-            icon: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFF60A5FA).withValues(alpha: 0.5),
-                  width: 1.5,
-                ),
-              ),
-              child: const CircleAvatar(
-                radius: 14,
-                backgroundColor: Color(0xFF1E3A8A),
-                child: Icon(
-                  Icons.person_rounded,
-                  color: Color(0xFF93C5FD),
-                  size: 16,
-                ),
-              ),
-            ),
-            onPressed: () => Navigator.pushNamed(context, '/profile'),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-
-      // Chat FAB with existing parameters
-      floatingActionButton: ChatBubbleButton(
-        currentUserId: currentUserId,
-        currentUserName: currentUserName,
-        receiverId: receiverId,
-        isAdmin: isAdmin,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-
-      // Animated Background + Body
-      body: Stack(
-        children: [
-          // Base gradient
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF060B14),
-                    Color(0xFF0B172B),
-                    Color(0xFF0F264A),
-                    Color(0xFF1E3A8A),
-                  ],
-                  stops: [0.0, 0.3, 0.7, 1.0],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-          ),
-
-          // Ambient floating orbs
-          AnimatedBuilder(
-            animation: _ambientFloat,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  Positioned(
-                    top: 40 + _ambientFloat.value,
-                    right: -60,
-                    child: _GlowOrb(
-                      size: 260,
-                      color: const Color(0xFF06B6D4).withValues(alpha: 0.16),
-                      blurRadius: 100,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 80 - _ambientFloat.value,
-                    left: -70,
-                    child: _GlowOrb(
-                      size: 280,
-                      color: const Color(0xFF3B82F6).withValues(alpha: 0.14),
-                      blurRadius: 110,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-
-          // Tech grid overlay
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _TechPatternPainter(
-                color: Colors.white.withValues(alpha: 0.02),
-              ),
-            ),
-          ),
-
-          // Main Scrollable Content
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isTablet ? 32 : 18,
-                  vertical: 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        // Custom Modern Glass AppBar (only shown on Home tab; other tabs manage their own AppBars)
+        appBar: _currentIndex == 0
+            ? AppBar(
+                title: Row(
                   children: [
-                    // Welcome & Profile Hero Card
-                    SlideTransition(
-                      position: _headerSlide,
-                      child: _HeroGreetingCard(
-                        greeting: _getGreeting(),
-                        user: user,
-                        employeeName: currentUserName,
-                        employeeId: currentUserId,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Section Heading
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Quick Modules',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.2,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Choose an enterprise service to proceed',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.65),
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF34D399),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${HomePage._items.length} Active',
-                                style: const TextStyle(
-                                  color: Color(0xFF93C5FD),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Grid of Menu Cards with Entrance Motion
-                    SlideTransition(
-                      position: _gridSlide,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return isTablet
-                              ? Row(
-                                  children: HomePage._items.map((item) {
-                                    final bool isEnabled =
-                                        item.route == '/profile' ||
-                                        item.route == '/vehicleTracking' ||
-                                        item.route == '/cvpsRequests';
-                                    return Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                        ),
-                                        child: _ModernMenuCard(
-                                          item: item,
-                                          isEnabled: isEnabled,
-                                          onTap: isEnabled
-                                              ? () => Navigator.pushNamed(
-                                                  context,
-                                                  item.route,
-                                                )
-                                              : null,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                )
-                              : Column(
-                                  children: HomePage._items.map((item) {
-                                    final bool isEnabled =
-                                        item.route == '/profile' ||
-                                        item.route == '/vehicleTracking' ||
-                                        item.route == '/cvpsRequests';
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 14),
-                                      child: _ModernMenuCard(
-                                        item: item,
-                                        isEnabled: isEnabled,
-                                        onTap: isEnabled
-                                            ? () => Navigator.pushNamed(
-                                                context,
-                                                item.route,
-                                              )
-                                            : null,
-                                      ),
-                                    );
-                                  }).toList(),
-                                );
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Enterprise System Status Banner
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F1E36).withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(10),
+                        color: const Color(0xFF1E3A8A).withValues(alpha: 0.6),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
+                          color: const Color(0xFF60A5FA).withValues(alpha: 0.3),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF34D399).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(
-                              Icons.security_rounded,
-                              color: Color(0xFF34D399),
-                              size: 18,
-                            ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/images/image3.jpg',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => const Icon(
+                            Icons.business_rounded,
+                            color: Color(0xFF60A5FA),
+                            size: 18,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Connected to HEG Enterprise Network',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Sessions secured with role-based access control',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-
-                    const SizedBox(height: 60), // Space for Chat FAB
+                    const SizedBox(width: 10),
+                    const Text(
+                      'HEG HRMS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 19,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
                   ],
                 ),
+                backgroundColor: const Color(0xFF070D1B).withValues(alpha: 0.75),
+                elevation: 0,
+                surfaceTintColor: Colors.transparent,
+                iconTheme: const IconThemeData(color: Colors.white),
+                actions: [
+                  IconButton(
+                    tooltip: 'Profile',
+                    icon: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF60A5FA).withValues(alpha: 0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const CircleAvatar(
+                        radius: 14,
+                        backgroundColor: Color(0xFF1E3A8A),
+                        child: Icon(
+                          Icons.person_rounded,
+                          color: Color(0xFF93C5FD),
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                    onPressed: () => setState(() => _currentIndex = 3),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              )
+            : null,
+
+        // Chat FAB with existing parameters (only on Home tab)
+        floatingActionButton: _currentIndex == 0
+            ? ChatBubbleButton(
+                currentUserId: currentUserId,
+                currentUserName: currentUserName,
+                receiverId: receiverId,
+                isAdmin: isAdmin,
+              )
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
+        // Fix 1: Use IndexedStack for Tab/Page Switching to eliminate white flashes
+        // Keeps all tab state alive in memory and switches tabs instantly with zero blank frames.
+        body: IndexedStack(
+          index: _currentIndex,
+          children: _pages,
+        ),
+
+        // Bottom Navigation Bar for instant switching
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF070D1B),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.1),
+                width: 0.8,
               ),
             ),
           ),
-        ],
-      ),
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = index);
+            },
+            backgroundColor: const Color(0xFF070D1B),
+            selectedItemColor: const Color(0xFF60A5FA),
+            unselectedItemColor: const Color(0xFF94A3B8),
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+            type: BottomNavigationBarType.fixed,
+            elevation: 12,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_rounded),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.directions_car_rounded),
+                label: 'VPMS',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long_rounded),
+                label: 'CVPS',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_rounded),
+                label: 'Profile',
+              ),
+            ],
+          ),
+        ),
 
-      // Redesigned Executive Drawer
-      drawer: _ModernDrawer(
-        user: user,
-        currentUserId: currentUserId,
-        currentUserName: currentUserName,
-        onLogout: () => _logout(context),
+        // Redesigned Executive Drawer
+        drawer: _currentIndex == 0
+            ? _ModernDrawer(
+                user: user,
+                currentUserId: currentUserId,
+                currentUserName: currentUserName,
+                onLogout: () => _logout(context),
+                onSelectTab: (index) {
+                  setState(() => _currentIndex = index);
+                },
+              )
+            : null,
       ),
     );
   }
@@ -969,12 +1071,14 @@ class _ModernDrawer extends StatelessWidget {
   final String currentUserId;
   final String currentUserName;
   final VoidCallback onLogout;
+  final ValueChanged<int>? onSelectTab;
 
   const _ModernDrawer({
     required this.user,
     required this.currentUserId,
     required this.currentUserName,
     required this.onLogout,
+    this.onSelectTab,
   });
 
   @override
@@ -1133,7 +1237,11 @@ class _ModernDrawer extends StatelessWidget {
                     subtitle: 'View employee information',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.pushNamed(context, '/profile');
+                      if (onSelectTab != null) {
+                        onSelectTab!(3);
+                      } else {
+                        Navigator.pushNamed(context, '/profile');
+                      }
                     },
                   ),
                   const SizedBox(height: 6),
@@ -1143,7 +1251,11 @@ class _ModernDrawer extends StatelessWidget {
                     subtitle: 'Vehicle tracking & stickers',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.pushNamed(context, '/vehicleTracking');
+                      if (onSelectTab != null) {
+                        onSelectTab!(1);
+                      } else {
+                        Navigator.pushNamed(context, '/vehicleTracking');
+                      }
                     },
                   ),
                   const SizedBox(height: 6),
@@ -1153,7 +1265,11 @@ class _ModernDrawer extends StatelessWidget {
                     subtitle: 'Contractor gate permits',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.pushNamed(context, '/cvpsRequests');
+                      if (onSelectTab != null) {
+                        onSelectTab!(2);
+                      } else {
+                        Navigator.pushNamed(context, '/cvpsRequests');
+                      }
                     },
                   ),
                 ],

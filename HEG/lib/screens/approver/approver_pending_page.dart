@@ -13,7 +13,10 @@ class ApproverPendingPage extends StatefulWidget {
 }
 
 class _ApproverPendingPageState extends State<ApproverPendingPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // Fix 2: Keep tab state alive to prevent disposing and rebuilding on tab switch
+  @override
+  bool get wantKeepAlive => true;
   final PassRegistryApi api = PassRegistryApi();
   final TextEditingController searchController = TextEditingController();
 
@@ -175,6 +178,7 @@ class _ApproverPendingPageState extends State<ApproverPendingPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF070D1B),

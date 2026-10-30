@@ -15,7 +15,10 @@ class VehicleTrackingPage extends StatefulWidget {
 }
 
 class _VehicleTrackingPageState extends State<VehicleTrackingPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // Fix 2: Keep tab state alive to prevent disposing and rebuilding on tab switch
+  @override
+  bool get wantKeepAlive => true;
   final PassRegistryApi api = PassRegistryApi();
   final TextEditingController searchController = TextEditingController();
 
@@ -157,9 +160,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
       allPasses.where((e) => e.status.trim().toUpperCase() == 'SAVED').length;
 
   int get rejectCount => allPasses.where((e) {
-        final s = e.status.trim().toUpperCase();
-        return s == 'REJECT' || s == 'REJECTED' || s == 'REGRET';
-      }).length;
+    final s = e.status.trim().toUpperCase();
+    return s == 'REJECT' || s == 'REJECTED' || s == 'REGRET';
+  }).length;
 
   void onSearch(String value) {
     setState(() {
@@ -235,10 +238,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => PassEntryPage(
-        registryId: row.passId,
-        isViewMode: true,
-      ),
+      builder: (_) => PassEntryPage(registryId: row.passId, isViewMode: true),
     );
   }
 
@@ -252,6 +252,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF070D1B),
@@ -326,33 +327,33 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                     ),
                   )
                 : hasError
-                    ? ErrorView(message: errorMessage, onRetry: () => loadPasses())
-                    : RefreshIndicator(
-                        color: const Color(0xFF38BDF8),
-                        backgroundColor: const Color(0xFF0F1E36),
-                        onRefresh: () => loadPasses(),
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: ListView(
-                            physics: const BouncingScrollPhysics(
-                              parent: AlwaysScrollableScrollPhysics(),
-                            ),
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                            children: [
-                              _buildSummaryPanel(),
-                              const SizedBox(height: 14),
-                              _buildControlPanel(),
-                              const SizedBox(height: 16),
-                              if (pagedPasses.isEmpty)
-                                const EmptyState()
-                              else
-                                ...pagedPasses.map((row) => _buildPassCard(row)),
-                              const SizedBox(height: 16),
-                              _buildPaginationPanel(),
-                            ],
-                          ),
+                ? ErrorView(message: errorMessage, onRetry: () => loadPasses())
+                : RefreshIndicator(
+                    color: const Color(0xFF38BDF8),
+                    backgroundColor: const Color(0xFF0F1E36),
+                    onRefresh: () => loadPasses(),
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: ListView(
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
                         ),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                        children: [
+                          _buildSummaryPanel(),
+                          const SizedBox(height: 14),
+                          _buildControlPanel(),
+                          const SizedBox(height: 16),
+                          if (pagedPasses.isEmpty)
+                            const EmptyState()
+                          else
+                            ...pagedPasses.map((row) => _buildPassCard(row)),
+                          const SizedBox(height: 16),
+                          _buildPaginationPanel(),
+                        ],
                       ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -363,7 +364,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
     final lastUpdatedText = lastUpdated == null
         ? '-'
         : '${lastUpdated!.hour.toString().padLeft(2, '0')}'
-            ':${lastUpdated!.minute.toString().padLeft(2, '0')}';
+              ':${lastUpdated!.minute.toString().padLeft(2, '0')}';
 
     return Container(
       decoration: BoxDecoration(
@@ -423,10 +424,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                     SizedBox(height: 2),
                     Text(
                       'Active vehicle passes, gate tracking & stickers',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
@@ -511,9 +509,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: accentColor.withValues(alpha: 0.25),
-        ),
+        border: Border.all(color: accentColor.withValues(alpha: 0.25)),
       ),
       child: Column(
         children: [
@@ -578,7 +574,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
               ),
               suffixIcon: searchText.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.white60),
+                      icon: const Icon(
+                        Icons.clear_rounded,
+                        size: 18,
+                        color: Colors.white60,
+                      ),
                       onPressed: () {
                         searchController.clear();
                         onSearch('');
@@ -618,34 +618,24 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
           Row(
             children: [
               Expanded(
-                child: _buildDropdown(
-                  'Status',
-                  filterStatus,
-                  [
-                    'ALL',
-                    'ACTIVE',
-                    'SAVED',
-                    'SUBMITTED',
-                    'REJECT',
-                    'NEEDSMODIFICATION',
-                  ],
-                  onStatusChange,
-                ),
+                child: _buildDropdown('Status', filterStatus, [
+                  'ALL',
+                  'ACTIVE',
+                  'SAVED',
+                  'SUBMITTED',
+                  'REJECT',
+                  'NEEDSMODIFICATION',
+                ], onStatusChange),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildDropdown(
-                  'Emp Type',
-                  filterEmpType,
-                  [
-                    'ALL',
-                    'HEG',
-                    'TACC',
-                    'CONTRACT',
-                    'CRE-PRM',
-                  ],
-                  onEmpTypeChange,
-                ),
+                child: _buildDropdown('Emp Type', filterEmpType, [
+                  'ALL',
+                  'HEG',
+                  'TACC',
+                  'CONTRACT',
+                  'CRE-PRM',
+                ], onEmpTypeChange),
               ),
             ],
           ),
@@ -653,22 +643,17 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
           const SizedBox(height: 10),
 
           // Vehicle Type Dropdown
-          _buildDropdown(
-            'Vehicle Type',
-            filterVehicleType,
-            [
-              'ALL',
-              'CAR',
-              'BIKE',
-              'SCOOTER',
-              'TRUCK',
-              'DUMPER',
-              'JCB',
-              'CRANE',
-              'TRACTOR',
-            ],
-            onVehicleTypeChange,
-          ),
+          _buildDropdown('Vehicle Type', filterVehicleType, [
+            'ALL',
+            'CAR',
+            'BIKE',
+            'SCOOTER',
+            'TRUCK',
+            'DUMPER',
+            'JCB',
+            'CRANE',
+            'TRACTOR',
+          ], onVehicleTypeChange),
         ],
       ),
     );
@@ -705,16 +690,11 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Color(0xFF60A5FA),
-            width: 1.4,
-          ),
+          borderSide: const BorderSide(color: Color(0xFF60A5FA), width: 1.4),
         ),
       ),
       items: items
@@ -795,8 +775,14 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                           spacing: 10,
                           runSpacing: 4,
                           children: [
-                            _topMeta('Pass #', row.passNo.isEmpty ? '-' : row.passNo),
-                            _topMeta('Gate', row.gateNo.isEmpty ? '-' : row.gateNo),
+                            _topMeta(
+                              'Pass #',
+                              row.passNo.isEmpty ? '-' : row.passNo,
+                            ),
+                            _topMeta(
+                              'Gate',
+                              row.gateNo.isEmpty ? '-' : row.gateNo,
+                            ),
                             _topMeta(
                               'Type',
                               row.vehicleType.isEmpty ? '-' : row.vehicleType,
@@ -863,8 +849,12 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                       label: 'Pass Sticker',
                       icon: Icons.print_outlined,
                       foreground: const Color(0xFFA7F3D0),
-                      background: const Color(0xFF10B981).withValues(alpha: 0.2),
-                      borderColor: const Color(0xFF34D399).withValues(alpha: 0.4),
+                      background: const Color(
+                        0xFF10B981,
+                      ).withValues(alpha: 0.2),
+                      borderColor: const Color(
+                        0xFF34D399,
+                      ).withValues(alpha: 0.4),
                       onTap: () => printSticker(row),
                     ),
                 ],
@@ -978,9 +968,7 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
       decoration: BoxDecoration(
         color: const Color(0xFF0F1E36).withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -1004,14 +992,21 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                     label: Text(
                       size.toString(),
                       style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
+                        color: selected
+                            ? Colors.white
+                            : const Color.fromARGB(179, 19, 18, 18),
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     selected: selected,
                     selectedColor: const Color(0xFF2563EB),
-                    backgroundColor: Colors.white.withValues(alpha: 0.05),
+                    backgroundColor: const Color.fromARGB(
+                      255,
+                      14,
+                      13,
+                      13,
+                    ).withValues(alpha: 0.05),
                     side: BorderSide(
                       color: selected
                           ? const Color(0xFF60A5FA)
@@ -1034,7 +1029,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
           Row(
             children: [
               OutlinedButton.icon(
-                onPressed: currentPage > 1 ? () => changePage(currentPage - 1) : null,
+                onPressed: currentPage > 1
+                    ? () => changePage(currentPage - 1)
+                    : null,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   disabledForegroundColor: Colors.white24,
@@ -1059,7 +1056,9 @@ class _VehicleTrackingPageState extends State<VehicleTrackingPage>
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: currentPage < totalPages ? () => changePage(currentPage + 1) : null,
+                onPressed: currentPage < totalPages
+                    ? () => changePage(currentPage + 1)
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
@@ -1162,9 +1161,7 @@ class EmptyState extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1E36).withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         children: [

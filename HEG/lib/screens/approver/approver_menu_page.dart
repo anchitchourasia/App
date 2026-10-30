@@ -12,7 +12,10 @@ class ApproverVehicleMenuPage extends StatefulWidget {
 }
 
 class _ApproverVehicleMenuPageState extends State<ApproverVehicleMenuPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // Fix 2: Keep tab state alive to prevent disposing and rebuilding on tab switch
+  @override
+  bool get wantKeepAlive => true;
   late final AnimationController _animController;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
@@ -51,6 +54,7 @@ class _ApproverVehicleMenuPageState extends State<ApproverVehicleMenuPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: const Color(0xFF070D1B),
@@ -354,12 +358,16 @@ class _ModernMenuCardState extends State<_ModernMenuCard> {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              widget.title,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16.5,
-                                fontWeight: FontWeight.w800,
+                            Flexible(
+                              child: Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
