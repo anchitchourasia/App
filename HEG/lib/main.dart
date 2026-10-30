@@ -22,7 +22,11 @@ import 'screens/cvps/cvps_pass_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: 'assets/.env');
+  try {
+    await dotenv.load(fileName: 'assets/.env');
+  } catch (e) {
+    debugPrint('assets/.env load skipped or failed: $e');
+  }
 
   // DB init
   

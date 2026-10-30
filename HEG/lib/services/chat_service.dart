@@ -7,6 +7,7 @@ import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // ✅ add
+import '../core/app_config.dart';
 
 class ChatMessage {
   final String senderId;
@@ -66,8 +67,25 @@ class ChatService {
   // ── Base URL ────────────────────────────────────────────────────────────
   // ✅ REPLACE WITH
   static String apiKeyHeaderName = 'X-API-KEY';
-  static String get baseUrl => dotenv.env['BASE_URL'] ?? '';
-  static String? get apiKey => dotenv.env['API_KEY'];
+  static String get baseUrl {
+    try {
+      if (dotenv.isInitialized) {
+        final val = dotenv.maybeGet('BASE_URL');
+        if (val != null && val.trim().isNotEmpty) return val.trim();
+      }
+    } catch (_) {}
+    return AppConfig.chatBaseUrl;
+  }
+
+  static String? get apiKey {
+    try {
+      if (dotenv.isInitialized) {
+        final val = dotenv.maybeGet('API_KEY');
+        if (val != null && val.trim().isNotEmpty) return val.trim();
+      }
+    } catch (_) {}
+    return AppConfig.chatApiKey;
+  }
 
   static StompClient? _client;
   static bool isConnected = false;

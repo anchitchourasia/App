@@ -4,6 +4,12 @@ class ApiConfig {
   static const String baseUrl = AppConfig.apiBaseUrl;
   static const String apiKey = AppConfig.apiKey;
 
+  // Environment & Chat backend configuration (from assets/.env & AppConfig)
+  static const String envBaseUrl = AppConfig.envBaseUrl;
+  static const String envApiKey = AppConfig.envApiKey;
+  static const String chatBaseUrl = AppConfig.chatBaseUrl;
+  static const String chatApiKey = AppConfig.chatApiKey;
+
   // Temporary dummy backend configuration for mobile IN / OUT Gate Log.
   static const String dummyGateLogBaseUrl = AppConfig.dummyGateLogBaseUrl;
 
